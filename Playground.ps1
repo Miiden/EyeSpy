@@ -64,51 +64,57 @@ function Async-TCP-Scan {
         )     
         $Threads = 20
         $Timeout = 500
+        $Ports = @(554, 8554)
 
         $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
         $runspacePool.Open()
         $runspaces = New-Object System.Collections.ArrayList
 
         $scriptBlock = {
-            param ($Target, $Timeout)
+            param ($Target, $Timeout, $Port)
 
             $tcpClient = New-Object System.Net.Sockets.TcpClient
-            $asyncResult = $tcpClient.BeginConnect($Target, 8554, $null, $null)
+            $asyncResult = $tcpClient.BeginConnect($Target, $Port, $null, $null)
             $wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
-            
+
             if ($wait) { 
                 try {
                     $tcpClient.EndConnect($asyncResult)
                     if ($tcpClient.Connected) {
                         #Port Open
                         $tcpClient.Close()
-                        return "$Target`:8554"
+                        return "$Target`:$Port Open"
                         
                     }
                 }
                 catch {
                     #Errorhandling Catch
                     $tcpClient.Close()
+                    #Write-Host "Debugging"
                     return "Unable to connect"
                 }
             }
             else {
                 #Port Closed
                 $tcpClient.Close()
+                #Write-Host "Debugging"
                 return "Unable to connect"
             }
         }
 
         foreach ($Computer in $Target) {
-            $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($Timeout)
-            $runspace.RunspacePool = $runspacePool
+            foreach ($Port in $Ports){
+                $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($Timeout).AddArgument($Port)
+                $runspace.RunspacePool = $runspacePool
 
-            [void]$runspaces.Add([PSCustomObject]@{
-                Runspace     = $runspace
-                Handle       = $runspace.BeginInvoke()
-                ComputerName = $Computer
-                Completed    = $false
-            })   
+                [void]$runspaces.Add([PSCustomObject]@{
+                    Runspace     = $runspace
+                    Handle       = $runspace.BeginInvoke()
+                    ComputerName = $Computer
+                    Port         = $Port
+                    Completed    = $false
+                })
+            }   
         }
 
         # Poll the runspaces and display results as they complete
