@@ -56,7 +56,7 @@ function Get-IpRange {
         }
 }
 
-function Runtime-Scan {
+function Async-TCP-Scan {
         [CmdletBinding(ConfirmImpact = 'None')]
         Param(
             [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
@@ -139,4 +139,4 @@ function Runtime-Scan {
 }
 
 $IpAddr = Get-IpRange -Target 192.168.0.210/28
-Runtime-Scan -Target $IpAddr
+Async-TCP-Scan -Target $IpAddr
