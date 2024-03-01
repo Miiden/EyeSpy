@@ -62,9 +62,9 @@ function Async-TCP-Scan {
             [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
             [string[]] $Target
         )     
-        $Threads = 20
-        $Timeout = 500
-        $Ports = @(554, 8554)
+        $Threads = 50
+        $Timeout = 300
+        $Ports = @(554, 8554, 5554)
 
         $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
         $runspacePool.Open()
