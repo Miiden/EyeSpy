@@ -36,15 +36,16 @@ function Scan-IPRange {
 
     # Resolve IP addresses from CIDR range if necessary
     $IPAddress = $null
-    if ($Target -match '(\d+\.\d+\.\d+\.\d+)/(\d+)') {
+    if ($Target -match '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\b([8-9]|[1-2][0-9]|3[0-2])\b$') {
 
         $IPRange = New-IPv4RangeFromCIDR -Target $Target
 
-    } elseif ($Target -match '\d+\.\d+\.\d+\.\d+') {
+    } elseif ($Target -match '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$') {
         $IPAddress = $Target
         $IPRange = @($Target)
     } else {
-        Write-Host "Invalid IP address format: $Target"
+        Write-Host -ForegroundColor red "Invalid IP address format: " -NoNewline
+        Write-Host "$Target`n`rCheck the format, IP ranges, and CIDR range (Not bigger than /8)."
         return
     }
 
@@ -103,5 +104,5 @@ function New-IPv4RangeFromCIDR {
 
 
 # Call the function with a target
-Scan-IPRange -Target "192.168.0.0/16"
+Scan-IPRange -Target "192.168.0.1/24"
 #Scan-IPRange -Target "192.168.0.219"
