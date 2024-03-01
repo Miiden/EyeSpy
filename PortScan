@@ -79,12 +79,13 @@ function New-IPv4RangeFromCIDR {
     Write-Host $NumberOfIPs
 
     $ip = [System.Net.IPAddress]::Parse($network).GetAddressBytes()
+    Write-Host $ip
     
     [Array]::Reverse($ip)
 
     $ip = ([System.Net.IPAddress]($ip -join ".")).Address
-    $StartIP = $ip
-    $EndIP = $ip + $NumberOfIPs
+    $StartIP = $ip + 1
+    $EndIP = $ip + ($NumberOfIPs - 1)
 
     # We make sure they are of type Double before conversion
     If ($EndIP -isnot [double]) {
@@ -104,5 +105,5 @@ function New-IPv4RangeFromCIDR {
 
 
 # Call the function with a target
-Scan-IPRange -Target "192.168.0.1/24"
+Scan-IPRange -Target "192.168.0.0/16"
 #Scan-IPRange -Target "192.168.0.219"
