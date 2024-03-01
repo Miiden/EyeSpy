@@ -1,69 +1,148 @@
-function RTSPscan()
-{
-    param(
-        [int] $Port = 8554,
-        $IP = "192.168.0.219",
-        [int] $TimeoutMilliseconds = 100  # Timeout for waiting for response (in milliseconds)
-    )
+function Get-IpRange {
+        [CmdletBinding(ConfirmImpact = 'None')]
+        Param(
+            [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
+            [string[]] $Target
+        )
 
-    $Encoding = [System.Text.Encoding]::ASCII
-    $open = $false
-
-    $Sock = New-Object System.Net.Sockets.TcpClient
-
-    try {
-        $connectionResult = $Sock.BeginConnect($IP,$Port,$null,$null)
-        $connectionSuccess = $connectionResult.AsyncWaitHandle.WaitOne($TimeoutMilliseconds)
-
-        if ($connectionSuccess -and $Sock.Connected) { 
-            $open = $true 
-        } 
-        else { 
-            throw "Connection attempt failed or timed out" 
-        }
-    }
-    catch {
-        Write-Host "Failed to connect to $IP`:$Port`: $_"
-        return [pscustomobject]@{ Address = $IP; Port = $port; Open = $open }
-    }
-
-    if ($open) {
-        $Stream = $Sock.GetStream()
-        $Reader = New-Object System.IO.StreamReader($Stream)
-        $Reader.BaseStream.ReadTimeout = $TimeoutMilliseconds
-        $Writer = New-Object System.IO.StreamWriter($Stream)
-
-        $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
-        $request = "DESCRIBE rtsp://$IP`:$Port/ RTSP/1.0$CRLF" +
-                   "CSeq: 2$CRLF$CRLF"
-
-        $Writer.Write($request)
-        $Writer.Flush()
-
-        $response = ''
-        try {
-            Start-Sleep -Milliseconds 100
-            while ($Stream.CanRead) {
-                $line = $Reader.ReadLine()
-                if ($line -eq $null) { break }
-                $response += $line + $CRLF
+        process {
+            $Computers = @()
+            foreach ($subnet in $Target) {
+                if ($subnet -match '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$') {
+                    # Treat as a single IP address
+                    $Computers += $subnet
+                }
+                elseif ($subnet -match '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\b(1[6-9]|2[0-9]|3[0-2])\b$') {
+                    # CIDR notation processing
+                    $IP = ($subnet -split '\/')[0]
+                    [int]$SubnetBits = ($subnet -split '\/')[1]
+                    if ($SubnetBits -lt 16 -or $SubnetBits -gt 30) {
+                        Write-Warning -Message 'Enter a CIDR value between 16 and 30'
+                        exit
+                    }
+                    $Octets = $IP -split '\.'
+                    $IPInBinary = @()
+                    foreach ($Octet in $Octets) {
+                        $OctetInBinary = [convert]::ToString($Octet, 2).PadLeft(8, '0')
+                        $IPInBinary += $OctetInBinary
+                    }
+                    $IPInBinary = $IPInBinary -join ''
+                    $HostBits = 32 - $SubnetBits
+                    $NetworkIDInBinary = $IPInBinary.Substring(0, $SubnetBits)
+                    $HostIDInBinary = '0' * $HostBits
+                    $imax = [convert]::ToInt32(('1' * $HostBits), 2) - 1 # -1 to remove broadcast address
+                    For ($i = 1; $i -le $imax; $i++) {
+                        $NextHostIDInDecimal = $i
+                        $NextHostIDInBinary = [convert]::ToString($NextHostIDInDecimal, 2).PadLeft($HostBits, '0')
+                        $NextIPInBinary = $NetworkIDInBinary + $NextHostIDInBinary
+                        $IP = @()
+                        For ($x = 0; $x -lt 4; $x++) {
+                            $StartCharNumber = $x * 8
+                            $IPOctetInBinary = $NextIPInBinary.Substring($StartCharNumber, 8)
+                            $IPOctetInDecimal = [convert]::ToInt32($IPOctetInBinary, 2)
+                            $IP += $IPOctetInDecimal
+                        }
+                        $IP = $IP -join '.'
+                        $Computers += $IP
+                    }
+                }
+                else {
+                    Write-Host -ForegroundColor red "Value`: [$subnet] is not in a valid format"
+                    exit
+                }
             }
-        } catch [System.IO.IOException] {
-            # Catching the exception without taking any action
-            
-            # Debugging: Handle timeout or connection closed gracefully
-            #Write-Host "Error reading response: $_"
+            # Remember: Only returns an IP list, not active hosts.
+            return $Computers
         }
-
-        Write-Host $response
-
-        $Reader.Dispose()
-        $Writer.Dispose()
-        $Stream.Dispose()
-        $Sock.Close()
-    }
-
-    return [pscustomobject]@{ Address = $IP; Port = $port; Open = $open }
 }
 
-RTSPscan
+function Async-TCP-Scan {
+        [CmdletBinding(ConfirmImpact = 'None')]
+        Param(
+            [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
+            [string[]] $Target
+        )     
+        $Threads = 50
+        $Timeout = 300
+        $Ports = @(554, 8554, 5554)
+
+        $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
+        $runspacePool.Open()
+        $runspaces = New-Object System.Collections.ArrayList
+
+        $scriptBlock = {
+            param ($Target, $Timeout, $Port)
+
+            $tcpClient = New-Object System.Net.Sockets.TcpClient
+            $asyncResult = $tcpClient.BeginConnect($Target, $Port, $null, $null)
+            $wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
+
+            if ($wait) { 
+                try {
+                    $tcpClient.EndConnect($asyncResult)
+                    if ($tcpClient.Connected) {
+                        #Port Open
+                        $tcpClient.Close()
+                        return "$Target`:$Port"
+                        
+                    }
+                }
+                catch {
+                    #Errorhandling Catch
+                    $tcpClient.Close()
+                    #Write-Host "Debugging"
+                    return "Unable to connect"
+                }
+            }
+            else {
+                #Port Closed
+                $tcpClient.Close()
+                #Write-Host "Debugging"
+                return "Unable to connect"
+            }
+        }
+
+        foreach ($Computer in $Target) {
+            foreach ($Port in $Ports){
+                $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($Timeout).AddArgument($Port)
+                $runspace.RunspacePool = $runspacePool
+
+                [void]$runspaces.Add([PSCustomObject]@{
+                    Runspace     = $runspace
+                    Handle       = $runspace.BeginInvoke()
+                    ComputerName = $Computer
+                    Port         = $Port
+                    Completed    = $false
+                })
+            }   
+        }
+
+        # Poll the runspaces and display results as they complete
+        do {
+            foreach ($runspace in $runspaces | Where-Object { -not $_.Completed }) {
+                if ($runspace.Handle.IsCompleted) {
+                    
+                    $runspace.Completed = $true
+                    $result = $runspace.Runspace.EndInvoke($runspace.Handle)
+                    $runspace.Runspace.Dispose()
+                    $runspace.Handle.AsyncWaitHandle.Close()
+
+                    if ($result -eq "Unable to connect"){
+                        continue
+                    }
+                    else {
+                        Write-Host -ForegroundColor Green "$result" 
+                    }
+                }
+            }
+
+            Start-Sleep -Milliseconds 100
+        } while ($runspaces | Where-Object { -not $_.Completed })
+
+        # Clean up
+        $runspacePool.Close()
+        $runspacePool.Dispose()
+}
+
+$IpAddr = Get-IpRange -Target 192.168.0.1/24
+Async-TCP-Scan -Target $IpAddr
