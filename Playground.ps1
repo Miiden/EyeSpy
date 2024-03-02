@@ -1,3 +1,5 @@
+####### WIP name - EyeSpy.ps1 #######
+
 function Get-IpRange {
         [CmdletBinding(ConfirmImpact = 'None')]
         Param(
