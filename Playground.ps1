@@ -56,6 +56,8 @@ function Get-IpRange {
         }
 }
 
+
+
 function Async-TCP-Scan {
         [CmdletBinding(ConfirmImpact = 'None')]
         Param(
@@ -65,6 +67,7 @@ function Async-TCP-Scan {
         $Threads = 50
         $Timeout = 300
         $Ports = @(554, 8554, 5554)
+        $AlivePorts = @()
 
         $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
         $runspacePool.Open()
@@ -83,21 +86,18 @@ function Async-TCP-Scan {
                     if ($tcpClient.Connected) {
                         #Port Open
                         $tcpClient.Close()
-                        return "$Target`:$Port Open"
-                        
+                        return "$Target`:$Port" 
                     }
                 }
                 catch {
                     #Errorhandling Catch
                     $tcpClient.Close()
-                    #Write-Host "Debugging"
                     return "Unable to connect"
                 }
             }
             else {
                 #Port Closed
                 $tcpClient.Close()
-                #Write-Host "Debugging"
                 return "Unable to connect"
             }
         }
@@ -131,7 +131,8 @@ function Async-TCP-Scan {
                         continue
                     }
                     else {
-                        Write-Host -ForegroundColor Green "$result" 
+                        Write-Host -ForegroundColor Green "$result"
+                        $ReturnedPorts += $result
                     }
                 }
             }
@@ -142,7 +143,11 @@ function Async-TCP-Scan {
         # Clean up
         $runspacePool.Close()
         $runspacePool.Dispose()
+        return $ReturnedPorts
 }
 
+$AlivePorts = @()
 $IpAddr = Get-IpRange -Target 192.168.0.210/28
-Async-TCP-Scan -Target $IpAddr
+$OpenPorts += Async-TCP-Scan -Target $IpAddr
+
+#$OpenPorts
