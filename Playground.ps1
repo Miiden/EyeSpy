@@ -146,6 +146,22 @@ function Async-TCP-Scan {
         return $ReturnedPorts
 }
 
+<#
+# Work in Progress - Creating a function to send the packets
+# Most likely the best idea is to strip the above function of the runtimes, and put them in their own function somehow.
+# Then i can call the Async Runspace Connections for each of the main things that needs to be done, i.e. Scanning, Connecting, Bruting Path, Bruting Creds.
+function Send-Packets {
+       [CmdletBinding(ConfirmImpact = 'None')]
+        Param(
+            [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
+            [string[]] $Target
+        )   
+
+
+}
+
+#>
+
 $AlivePorts = @()
 $IpAddr = Get-IpRange -Target 192.168.0.210/28
 $OpenPorts += Async-TCP-Scan -Target $IpAddr
