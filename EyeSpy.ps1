@@ -56,6 +56,8 @@ function Get-IpRange {
         }
 }
 
+
+
 function Async-TCP-Scan {
         [CmdletBinding(ConfirmImpact = 'None')]
         Param(
@@ -65,6 +67,7 @@ function Async-TCP-Scan {
         $Threads = 50
         $Timeout = 300
         $Ports = @(554, 8554, 5554)
+        $AlivePorts = @()
 
         $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
         $runspacePool.Open()
@@ -83,21 +86,18 @@ function Async-TCP-Scan {
                     if ($tcpClient.Connected) {
                         #Port Open
                         $tcpClient.Close()
-                        return "$Target`:$Port"
-                        
+                        return "$Target`:$Port" 
                     }
                 }
                 catch {
                     #Errorhandling Catch
                     $tcpClient.Close()
-                    #Write-Host "Debugging"
                     return "Unable to connect"
                 }
             }
             else {
                 #Port Closed
                 $tcpClient.Close()
-                #Write-Host "Debugging"
                 return "Unable to connect"
             }
         }
@@ -131,7 +131,8 @@ function Async-TCP-Scan {
                         continue
                     }
                     else {
-                        Write-Host -ForegroundColor Green "$result" 
+                        Write-Host -ForegroundColor Green "$result"
+                        $ReturnedPorts += $result
                     }
                 }
             }
@@ -142,7 +143,29 @@ function Async-TCP-Scan {
         # Clean up
         $runspacePool.Close()
         $runspacePool.Dispose()
+        return $ReturnedPorts
 }
 
-$IpAddr = Get-IpRange -Target 192.168.0.1/24
-Async-TCP-Scan -Target $IpAddr
+<#
+# Work in Progress - Creating a function to send the packets
+# Most likely the best idea is to strip the above function of the runtimes, and put them in their own function somehow.
+# Then i can call the Async Runspace Connections for each of the main things that needs to be done, i.e. Scanning, Connecting, Bruting Path, Bruting Creds.
+
+function Send-Packets {
+       [CmdletBinding(ConfirmImpact = 'None')]
+        Param(
+            [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
+            [string[]] $Target
+        )   
+
+
+
+}
+
+#>
+
+$AlivePorts = @()
+$IpAddr = Get-IpRange -Target 192.168.0.210/28
+$OpenPorts += Async-TCP-Scan -Target $IpAddr
+
+#$OpenPorts
