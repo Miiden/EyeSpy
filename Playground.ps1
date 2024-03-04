@@ -1,4 +1,74 @@
-####### WIP name - EyeSpy.ps1 #######
+function EyeSpy {
+
+    [CmdletBinding(DefaultParameterSetName = 'Default')]
+    Param(
+        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [String]$Scan,
+
+        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [String]$FullAuto,
+
+        #[Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        #[int]$Threads = 50,
+
+        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [Switch]$Help
+
+    )
+
+    if ($Help) {
+
+        $HelpOutput = @("
+[ Help ] ================================================
+
+                    EyeSpy 
+                    by: Miiden
+
+=========================================================
+ 
+ Example Usage:
+
+ EyeSpy -Scan 192.168.0.1/24
+ Eyespy -FullAuto 192.168.0.1/24
+
+=========================================================
+")
+
+        $HelpOutput | Write-Output
+        return
+
+    }
+
+    $Banner = @("
+=========================================================
+                
+=========================================================
+         _______             _______             
+        |    ___.--.--.-----|     __.-----.--.--.
+        |    ___|  |  |  -__|__     |  _  |  |  |
+        |_______|___  |_____|_______|   __|___  |
+                |_____|             |__|  |_____|   
+                                
+=========================================================
+                By: Miiden
+=========================================================
+    ")
+
+    if (!$Scan -and !$FullAuto) {
+    
+        Write-Host
+        Write-Host "[!] " -ForegroundColor "Red" -NoNewline
+        Write-Host "You must provide either -Scan or -FullAuto"
+    
+        Write-Host "[!] " -ForegroundColor "Red" -NoNewline
+        Write-Host "Run ""EyeSpy -Help"" for command line usage"
+        Write-Host
+    
+        return
+    
+    }
+
+$Banner
 
 function Get-IpRange {
         [CmdletBinding(ConfirmImpact = 'None')]
@@ -20,7 +90,7 @@ function Get-IpRange {
                     [int]$SubnetBits = ($subnet -split '\/')[1]
                     if ($SubnetBits -lt 16 -or $SubnetBits -gt 30) {
                         Write-Warning -Message 'Enter a CIDR value between 16 and 30'
-                        exit
+                        return
                     }
                     $Octets = $IP -split '\.'
                     $IPInBinary = @()
@@ -50,7 +120,7 @@ function Get-IpRange {
                 }
                 else {
                     Write-Host -ForegroundColor red "Value`: [$subnet] is not in a valid format"
-                    exit
+                    return
                 }
             }
             # Remember: Only returns an IP list, not active hosts.
@@ -60,27 +130,24 @@ function Get-IpRange {
 
 
 
-function Async-TCP-Scan {
+function PortScan {
         [CmdletBinding(ConfirmImpact = 'None')]
         Param(
             [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
             [string[]] $Target
-        )     
-        $Threads = 50
-        $Timeout = 300
-        $Ports = @(554, 8554, 5554)
-        $AlivePorts = @()
+        ) 
 
-        $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
-        $runspacePool.Open()
-        $runspaces = New-Object System.Collections.ArrayList
+    $Ports = @(554, 8554, 5554)
+    $Timeout = 300
+    $AlivePorts = @()
 
-        $scriptBlock = {
-            param ($Target, $Timeout, $Port)
-
-            $tcpClient = New-Object System.Net.Sockets.TcpClient
-            $asyncResult = $tcpClient.BeginConnect($Target, $Port, $null, $null)
-            $wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
+    $scriptBlock = {
+        
+        param ($Target, $Timeout, $Port)
+        
+        $tcpClient = New-Object System.Net.Sockets.TcpClient
+        $asyncResult = $tcpClient.BeginConnect($Target, $Port, $null, $null)
+        $wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
 
             if ($wait) { 
                 try {
@@ -88,19 +155,19 @@ function Async-TCP-Scan {
                     if ($tcpClient.Connected) {
                         #Port Open
                         $tcpClient.Close()
-                        return "$Target`:$Port" 
+                        return "$Target`:$Port"
                     }
                 }
                 catch {
                     #Errorhandling Catch
                     $tcpClient.Close()
-                    return "Unable to connect"
+                    return "Error with Connection"
                 }
             }
             else {
                 #Port Closed
                 $tcpClient.Close()
-                return "Unable to connect"
+                return "Error with Connection"
             }
         }
 
@@ -118,6 +185,29 @@ function Async-TCP-Scan {
                 })
             }   
         }
+        Write-Host "$TotalTargets"
+}
+
+
+function Async-Runspaces {
+        [CmdletBinding(ConfirmImpact = 'None')]
+        Param(
+            [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
+            [string[]] $Target,
+            [Parameter(Mandatory, ValueFromPipeline, Position = 1)]
+            [string[]] $Option
+
+        )     
+        $Threads = 50
+        $Timeout = 300
+
+        $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
+        $runspacePool.Open()
+        $runspaces = New-Object System.Collections.ArrayList
+
+        if ($Option = "PortScan"){
+            PortScan -Target $Target
+        }
 
         # Poll the runspaces and display results as they complete
         do {
@@ -129,12 +219,12 @@ function Async-TCP-Scan {
                     $runspace.Runspace.Dispose()
                     $runspace.Handle.AsyncWaitHandle.Close()
 
-                    if ($result -eq "Unable to connect"){
+                    if ($result -eq "Error with Connection"){
                         continue
                     }
                     else {
                         Write-Host -ForegroundColor Green "$result"
-                        $ReturnedPorts += $result
+                        $ReturnedResult += $result
                     }
                 }
             }
@@ -145,27 +235,115 @@ function Async-TCP-Scan {
         # Clean up
         $runspacePool.Close()
         $runspacePool.Dispose()
-        return $ReturnedPorts
+        return $ReturnedResult
 }
 
-<#
-# Work in Progress - Creating a function to send the packets
-# Most likely the best idea is to strip the above function of the runtimes, and put them in their own function somehow.
-# Then i can call the Async Runspace Connections for each of the main things that needs to be done, i.e. Scanning, Connecting, Bruting Path, Bruting Creds.
+
 function Send-Packets {
-       [CmdletBinding(ConfirmImpact = 'None')]
+        [CmdletBinding(ConfirmImpact = 'None')]
         Param(
             [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
-            [string[]] $Target
+            [string[]] $AlivePorts
         )   
+
+        foreach ($AlivePort in $AlivePorts){
+        
+            $IP = ($AlivePort -split ':')[0]
+            [int]$Port = ($AlivePort -split ':')[1]
+            $Encoding = [System.Text.Encoding]::ASCII
+            [int] $TimeoutMilliseconds = 100 
+            $open = $false
+
+            $Sock = New-Object System.Net.Sockets.TcpClient
+
+            try {
+                $connectionResult = $Sock.BeginConnect($IP,$Port,$null,$null)
+                $connectionSuccess = $connectionResult.AsyncWaitHandle.WaitOne($TimeoutMilliseconds)
+
+                if ($connectionSuccess -and $Sock.Connected) { 
+                    $open = $true 
+                } 
+                else { 
+                    throw "Connection attempt failed or timed out" 
+                }
+            }
+            catch {
+                Write-Host "Failed to connect to $IP`:$Port"
+            }
+
+            if ($open) {
+                $Stream = $Sock.GetStream()
+                $Reader = New-Object System.IO.StreamReader($Stream)
+                $Reader.BaseStream.ReadTimeout = $TimeoutMilliseconds
+                $Writer = New-Object System.IO.StreamWriter($Stream)
+
+                $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
+                $request = "DESCRIBE rtsp://$IP`:$Port/MyStream RTSP/1.0$CRLF" +
+                           "CSeq: 2$CRLF$CRLF"
+
+                $Writer.Write($request)
+                $Writer.Flush()
+
+                $response = ''
+                try {
+                    Start-Sleep -Milliseconds 100
+                    while ($Stream.CanRead) {
+                        $line = $Reader.ReadLine()
+                        if ($line -eq $null) { break }
+                        $response += $line + $CRLF
+                    }
+                } catch [System.IO.IOException] {
+                    # Catching the exception without taking any action
+            
+                    # Debugging: Handle timeout or connection closed gracefully
+                    #Write-Host "Error reading response: $_"
+                }
+
+                Write-Host $response
+
+                $Reader.Dispose()
+                $Writer.Dispose()
+                $Stream.Dispose()
+                $Sock.Close()
+            }
+           }
+}
+
+[array]$AlivePorts = @()
+
+    if ($Scan){
+
+        $IpAddr = Get-IpRange -Target $Scan
+        $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
+    
+        if ($AlivePorts.Length -eq 0){  
+            Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
+            Write-Host $AlivePorts
+            return
+        }
+        $AlivePorts
+   
+        return
+    }
+
+    if ($FullAuto){
+        $IpAddr = Get-IpRange -Target $FullAuto
+        $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
+
+        if ($AlivePorts){ 
+            Start-Sleep -Milliseconds 500
+            Send-Packets -AlivePorts $AlivePorts
+        } else {
+            Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
+            Write-Host $AlivePorts
+        }
+        return
+    }
+
 
 
 }
 
-#>
 
-$AlivePorts = @()
-$IpAddr = Get-IpRange -Target 192.168.0.210/28
-$OpenPorts += Async-TCP-Scan -Target $IpAddr
 
-#$OpenPorts
+#return [pscustomobject]@{ Address = $IP; Port = $port; Open = $open }
