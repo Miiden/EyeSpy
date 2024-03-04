@@ -185,7 +185,6 @@ function PortScan {
                 })
             }   
         }
-        Write-Host "$TotalTargets"
 }
 
 
