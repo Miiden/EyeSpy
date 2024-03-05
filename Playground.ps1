@@ -7,6 +7,12 @@ $request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
 "CSeq: 2$CRLF" +
 "Authorization: Basic YWRtaW46YWRtaW4=$CRLF$CRLF"
 
+$user = "username"
+$pass = "password"
+$authString = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$user:$pass"))
+Write-Output $authString
+
+
 If it's a 401 or 403, it means that the credentials are wrong but the route might be okay.
 If it's a 404, it means that the route is incorrect but the credentials might be okay.
 If it's a 200, the stream is accessed successfully.
@@ -245,9 +251,37 @@ function Async-Runspaces {
                     if ($result -eq "Error with Connection"){
                         continue
                     }
-                    else {
+                    elseif($Option -eq "PortScan") {
                         Write-Host -ForegroundColor Green "$result"
                         $ReturnedResult += $result
+
+                    }elseif($Option -eq "PathScan") {
+                        if ($result[0] -eq "200"){
+                            Write-Host -NoNewline -ForegroundColor Green $result[0] $result[2] $result[3]
+                            if ($result[1] -eq ""){
+                                Write-Host -ForegroundColor Green " /"
+                            }else{
+                                Write-Host -ForegroundColor Green " " $result[1]
+                            }
+                            $ReturnedResult += $result
+
+                        } elseif ($result[0] -eq "401" -or $result[0] -eq "403"){
+                            #Debugging line
+                            Write-Host -NoNewline -ForegroundColor Yellow $result[0] $result[2] $result[3]
+                            if ($result[1] -eq ""){
+                                Write-Host -ForegroundColor Yellow " /"
+                            }else{
+                                Write-Host -ForegroundColor Yellow " " $result[1]
+                            }
+                            $ReturnedResult += $result
+                        
+                        } else {
+                            #Should catch any other status codes including 404
+                            #Debugging line
+                            #Write-Host -NoNewline -ForegroundColor Yellow $result[0]  $result[2] $result[3]
+                            continue
+                        }
+
                     }
                 }
             }
@@ -295,6 +329,7 @@ function PathScan {
                                        "CSeq: 2$CRLF$CRLF" #+
                                        #"Authorization: Basic YWRtaW46YWRtaW4=$CRLF$CRLF"
 
+
                             $Writer.Write($request)
                             $Writer.Flush()
 
@@ -313,9 +348,14 @@ function PathScan {
                                 #Write-Host "Error reading response: $_"
                             }
 
-                            #Debugging Line:
+                            #Take first line of response and check for 200
+                            # Extract the status code from the first line
+                            $statusLine = $response.Split([Environment]::NewLine)[0]
+                            $statusCode = ($statusLine -split ' ')[1].Trim()
+
                             $tcpClient.Close()
-                            return $response
+                            #return $response
+                            return @($statusCode, $Path, $IP, $Port)
                         }
                     }
                     catch {
@@ -357,6 +397,7 @@ function PathScan {
 
 }
 
+<#
 function AuthScan {
     [CmdletBinding(ConfirmImpact = 'None')]
     Param(
@@ -451,6 +492,7 @@ function AuthScan {
 
 
 }
+#>
 
 [array]$AlivePorts = @()
 
@@ -489,4 +531,4 @@ function AuthScan {
 
 
 
-#return [pscustomobject]@{ Address = $IP; Port = $port; Open = $open }
+#return #[pscustomobject]@{ Address = $IP; Port = $port; Open = $open }
