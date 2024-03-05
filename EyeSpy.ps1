@@ -155,7 +155,7 @@ function PortScan {
                     if ($tcpClient.Connected) {
                         #Port Open
                         $tcpClient.Close()
-                        return "$Target`:$Port" 
+                        return "$Target`:$Port"
                     }
                 }
                 catch {
@@ -268,7 +268,6 @@ function Send-Packets {
             }
             catch {
                 Write-Host "Failed to connect to $IP`:$Port"
-                #return [pscustomobject]@{ Address = $IP; Port = $port; Open = $open }
             }
 
             if ($open) {
@@ -278,7 +277,7 @@ function Send-Packets {
                 $Writer = New-Object System.IO.StreamWriter($Stream)
 
                 $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
-                $request = "DESCRIBE rtsp://$IP`:$Port/ RTSP/1.0$CRLF" +
+                $request = "DESCRIBE rtsp://$IP`:$Port/MyStream RTSP/1.0$CRLF" +
                            "CSeq: 2$CRLF$CRLF"
 
                 $Writer.Write($request)
@@ -309,19 +308,41 @@ function Send-Packets {
            }
 }
 
-        $AlivePorts = @()
-        
-        if ($Scan){
-            $IpAddr = Get-IpRange -Target $Scan
-            $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
+[array]$AlivePorts = @()
+
+    if ($Scan){
+
+        $IpAddr = Get-IpRange -Target $Scan
+        $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
+    
+        if ($AlivePorts.Length -eq 0){  
+            Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
+            Write-Host $AlivePorts
             return
         }
-        
-        if ($FullAuto){
-            $IpAddr = Get-IpRange -Target $FullAuto
-            $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
-            Start-Sleep -Seconds 3
+        $AlivePorts
+   
+        return
+    }
+
+    if ($FullAuto){
+        $IpAddr = Get-IpRange -Target $FullAuto
+        $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
+
+        if ($AlivePorts){ 
+            Start-Sleep -Milliseconds 500
             Send-Packets -AlivePorts $AlivePorts
-            return
+        } else {
+            Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
+            Write-Host $AlivePorts
         }
+        return
+    }
+
+
+
 }
+
+
+
+#return [pscustomobject]@{ Address = $IP; Port = $port; Open = $open }
