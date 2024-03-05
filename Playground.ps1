@@ -1,3 +1,19 @@
+<#
+Attack Path: Find Port -> Find AuthType -> Find Creds -> Find Path
+
+Request For Basic Auth admin:admin
+
+$request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
+"CSeq: 2$CRLF" +
+"Authorization: Basic YWRtaW46YWRtaW4=$CRLF$CRLF"
+
+If it's a 401 or 403, it means that the credentials are wrong but the route might be okay.
+If it's a 404, it means that the route is incorrect but the credentials might be okay.
+If it's a 200, the stream is accessed successfully.
+
+
+#>
+
 function EyeSpy {
 
     [CmdletBinding(DefaultParameterSetName = 'Default')]
@@ -319,7 +335,7 @@ function PathScan {
         [string[]] $Targets
     ) 
 
-    $Paths = @("MyPath", "MyScan", "axis/camera", "11/01", "MyStream")
+    $Paths = @("", "MyPath", "MyScan", "axis/camera", "11/01", "MyStream")
     $Timeout = 300
 
     $scriptBlock = {
@@ -342,7 +358,8 @@ function PathScan {
 
                             $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
                             $request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
-                                       "CSeq: 2$CRLF$CRLF"
+                                       "CSeq: 2$CRLF$CRLF" #+
+                                       #"Authorization: Basic YWRtaW46YWRtaW4=$CRLF$CRLF"
 
                             $Writer.Write($request)
                             $Writer.Flush()
