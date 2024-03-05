@@ -196,106 +196,99 @@ function PortScan {
 }
 #Function to use Async-Runtimes (Badly) and handle any results from other functions
 function Async-Runspaces {
-        [CmdletBinding(ConfirmImpact = 'None')]
-        Param(
-            [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
-            [string[]] $Target,
-            [Parameter(Mandatory, ValueFromPipeline, Position = 1)]
-            [string[]] $Option
+    [CmdletBinding(ConfirmImpact = 'None')]
+    Param(
+        [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
+        [string[]] $Target,
+        [Parameter(Mandatory, ValueFromPipeline, Position = 1)]
+        [string[]] $Option
 
-        )   
-        
-        #Function Wide Variables  
-        $Threads = 50
-        $Timeout = 300
-        $ReturnedResult = @()
-        $Auth200 = $False
-        $NoAuth200 = $False
+    )   
+    
+    #Function Wide Variables  
+    $Threads = 30
+    $Timeout = 100
+    $ReturnedResult = @()
+    $Auth200 = $False
+    $NoAuth200 = $False
 
-        $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
-        $runspacePool.Open()
-        $runspaces = New-Object System.Collections.ArrayList
+    $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
+    $runspacePool.Open()
+    $runspaces = New-Object System.Collections.ArrayList
 
 
-        #My Weird way of Calling the Scripts/Runtime blocks to be used in this function
-        if ($Option -eq "PortScan"){
-            PortScan -Target $Target
-        } elseif ($Option -eq "PathAttack" -or $Option -eq "FullPathAttack"){
-            PathAttack -Targets $Target
-        } elseif ($Option -eq "AuthAttack"){
-            AuthAttack -Targets $Target
-        }
+    #My Weird way of Calling the Scripts/Runtime blocks to be used in this function
+    if ($Option -eq "PortScan"){
+        PortScan -Target $Target
+    } elseif ($Option -eq "PathAttack" -or $Option -eq "FullPathAttack"){
+        PathAttack -Targets $Target
+    } elseif ($Option -eq "AuthAttack"){
+        AuthAttack -Targets $Target
+    }
 
-        # Poll the runspaces and display results as they complete
-        do {
-            foreach ($runspace in $runspaces | Where-Object { -not $_.Completed }) {
-                if ($runspace.Handle.IsCompleted) {
+    # Poll the runspaces and display results as they complete
+    do {
+        foreach ($runspace in $runspaces | Where-Object { -not $_.Completed -and -not ($NoAuth200 -or $Auth200) }) {
+            if ($runspace.Handle.IsCompleted) {
+                
+                $runspace.Completed = $true
+                $result = $runspace.Runspace.EndInvoke($runspace.Handle)
+                $runspace.Runspace.Dispose()
+                $runspace.Handle.AsyncWaitHandle.Close()
+
+                if ($result -eq "Error with Connection"){
+                    continue
+                }
+                # Handling of the PortScan Results:
+                elseif($Option -eq "PortScan") {
+                    $ReturnedResult += $result
+
+                # Handling of the Path Attacking Results:
+                } elseif ($Option -eq "PathAttack" -or $Option -eq "FullPathAttack") {
+                    $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
+                    if ($result[3] -eq "200"){
+                        #Checking for No Authentication on all Paths
+                        Write-Host -ForegroundColor Green "No Authentication Required:" $concat
+                        if ($Option -eq "PathAttack"){$NoAuth200 = $True}
+                        
+                    } elseif ($result[3] -eq "401" -or $result[3] -eq "403") {
+                        #Find any 401's or 403's for Authentication BruteForcing
+                        $ReturnedResult += $concat
                     
-                    $runspace.Completed = $true
-                    $result = $runspace.Runspace.EndInvoke($runspace.Handle)
-                    $runspace.Runspace.Dispose()
-                    $runspace.Handle.AsyncWaitHandle.Close()
-
-                    if ($result -eq "Error with Connection"){
+                    } else {
+                        #Should catch and discard any other status codes including 404
                         continue
                     }
-                    # Handling of the PortScan Results:
-                    elseif($Option -eq "PortScan") {
-                        $ReturnedResult += $result
 
-                    # Handling of the Path Attacking Results:
-                    }elseif($Option -eq "PathAttack" -or $Option -eq "FullPathAttack") {
-                        $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
-                        if ($result[3] -eq "200"){
-                            #Checking for No Authentication on all Paths
-                            Write-Host -ForegroundColor Green "No Authentication Required:" $concat
-                            if ($Option -eq "PathAttack"){$NoAuth200 = $True}
-                            
-                        } elseif ($result[3] -eq "401" -or $result[3] -eq "403"){
-                            #Find any 401's or 403's for Authentication BruteForcing
-                            $ReturnedResult += $concat
-                        
-                        } else {
-                            #Should catch and discard any other status codes including 404
-                            continue
-                        }
-
-                    # Handling of the Credential Attacking Results:
-                    }elseif ($Option -eq "AuthAttack") {
-                        $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
-                        $foundCreds = $result[4] + ":" + $result[5]
-                        if ($result[3] -eq "200"){
-                            #Basic Auth Credentials Found
-                            Write-Host -NoNewline -ForegroundColor Green "Credentials Found:" $concat 
-                            Write-Host " -> " $foundCreds
-                            $Auth200 = $True
-                        } else {
-                            #Should catch and discard any other status codes including 404
-
-                            continue
-                        }
-                        
+                # Handling of the Credential Attacking Results:
+                } elseif ($Option -eq "AuthAttack") {
+                    $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
+                    $foundCreds = $result[4] + ":" + $result[5]
+                    if ($result[3] -eq "200"){
+                        #Basic Auth Credentials Found
+                        Write-Host -NoNewline -ForegroundColor Green "Credentials Found:" $concat 
+                        Write-Host " -> " $foundCreds
+                        $Auth200 = $True
+                    } else {
+                        #Should catch and discard any other status codes including 404
+                        continue
                     }
-
+                    
                 }
             }
-
-        Start-Sleep -Milliseconds 100
-        } while ($runspaces | Where-Object { -not $_.Completed })
-        
-        if ($NoAuth200 -eq $true -or $Auth200 -eq $true) {
-             $runspaces | ForEach-Object {
-                $runspacePool.Close()
-                $runspacePool.Dispose()
-             }
-             return $ReturnedResult
         }
 
+    Start-Sleep -Milliseconds 100
+    } while ($runspaces | Where-Object { -not $_.Completed -and -not ($NoAuth200 -or $Auth200) })
+    
         # Clean up
         $runspacePool.Close()
         $runspacePool.Dispose()
         return $ReturnedResult
 }
+
+
+
 #Function outlines the Runtime Environments when Enumerating common IP Camera URL Paths
 function PathAttack {
     [CmdletBinding(ConfirmImpact = 'None')]
