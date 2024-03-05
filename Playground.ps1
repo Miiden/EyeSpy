@@ -1,17 +1,6 @@
 <#
 Attack Path: Find Port -> Find AuthType -> Find Creds -> Find Path
 
-Request For Basic Auth admin:admin
-
-$request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
-"CSeq: 2$CRLF" +
-"Authorization: Basic YWRtaW46YWRtaW4=$CRLF$CRLF"
-
-$user = "username"
-$pass = "password"
-$authString = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$user:$pass"))
-Write-Output $authString
-
 
 If it's a 401 or 403, it means that the credentials are wrong but the route might be okay.
 If it's a 404, it means that the route is incorrect but the credentials might be okay.
@@ -276,7 +265,18 @@ function Async-Runspaces {
                         }
 
                     }elseif ($Option -eq "AuthAttack") {
-                        Write-Host -ForegroundColor Green "$result"
+                        $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
+                        $foundCreds = $result[4] + ":" + $result[5]
+                        if ($result[3] -eq "200"){
+                            #Basic Auth Credentials Found
+                            Write-Host -NoNewline -ForegroundColor Green "Credentials Found:" $concat 
+                            Write-Host " -> " $foundCreds
+                        } else {
+                            #Should catch any other status codes including 404
+                            #Debugging line
+                            #Write-Host -NoNewline -ForegroundColor Yellow $result[0]  $result[2] $result[3]
+                            continue
+                        }
                         #$ReturnedResult += $result
                         
                         }
@@ -403,11 +403,11 @@ function AuthAttack {
 
     $UserList = @("root","admin","administrator")
     $PassList = @("root","admin", "password")
-    $Timeout = 300
+    $Timeout = 500
 
     $scriptBlock = {
         
-        param ($IP, $Timeout, $Port, $Path, $authString)
+        param ($IP, $Timeout, $Port, $Path, $authString, $Username, $Password)
 
             $tcpClient = New-Object System.Net.Sockets.TcpClient
             $asyncResult = $tcpClient.BeginConnect($IP, $Port, $null, $null)
@@ -439,6 +439,7 @@ function AuthAttack {
                                     if ($line -eq $null) { break }
                                         $response += $line + $CRLF
                                 }
+                                Start-Sleep -Milliseconds 100
                             } catch [System.IO.IOException] {
                                 # Catching the exception without taking any action
             
@@ -447,8 +448,12 @@ function AuthAttack {
                             }
 
                             #Debugging Line:
+                            # Extract the status code from the first line
+                            $statusLine = $response.Split([Environment]::NewLine)[0]
+                            $statusCode = ($statusLine -split ' ')[1].Trim()
+
                             $tcpClient.Close()
-                            return $response
+                            return @($IP, $Port, $Path, $statusCode, $Username, $Password)
                         }
                     }
                     catch {
@@ -474,13 +479,15 @@ function AuthAttack {
                 foreach($Username in $UserList){
                     foreach($Password in $PassList){
                         $authString = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$Username`:$Password"))
-                        $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($IP).AddArgument($Timeout).AddArgument($Port).AddArgument($Path).AddArgument($authString)
+                        $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($IP).AddArgument($Timeout).AddArgument($Port).AddArgument($Path).AddArgument($authString).AddArgument($Username).AddArgument($Password)
                         $runspace.RunspacePool = $runspacePool
                   
                         [void]$runspaces.Add([PSCustomObject]@{
                             Runspace     = $runspace
                             Handle       = $runspace.BeginInvoke()
                             Auth         = $authString
+                            Username     = $Username
+                            Password     = $Password
                             ComputerName = $IP
                             Port         = $Port
                             Path         = $Path
