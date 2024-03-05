@@ -227,15 +227,15 @@ function Async-Runspaces {
         )     
         $Threads = 50
         $Timeout = 300
-
+        $ReturnedResult = @()
         $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
         $runspacePool.Open()
         $runspaces = New-Object System.Collections.ArrayList
 
         if ($Option -eq "PortScan"){
             PortScan -Target $Target
-        } elseif ($Option -eq "PathScan"){
-            PathScan -Targets $Target
+        } elseif ($Option -eq "AttackCamera"){
+            AttackCamera -Targets $Target
         }
 
         # Poll the runspaces and display results as they complete
@@ -255,25 +255,16 @@ function Async-Runspaces {
                         Write-Host -ForegroundColor Green "$result"
                         $ReturnedResult += $result
 
-                    }elseif($Option -eq "PathScan") {
-                        if ($result[0] -eq "200"){
-                            Write-Host -NoNewline -ForegroundColor Green $result[0] $result[2] $result[3]
-                            if ($result[1] -eq ""){
-                                Write-Host -ForegroundColor Green " /"
-                            }else{
-                                Write-Host -ForegroundColor Green " " $result[1]
-                            }
-                            $ReturnedResult += $result
+                    }elseif($Option -eq "AttackCamera") {
+                        $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
+                        if ($result[3] -eq "200"){
+                            #Checking for No Authentication on all Paths
+                            Write-Host -ForegroundColor Green "No Authentication Required:" $concat
 
-                        } elseif ($result[0] -eq "401" -or $result[0] -eq "403"){
-                            #Debugging line
-                            Write-Host -NoNewline -ForegroundColor Yellow $result[0] $result[2] $result[3]
-                            if ($result[1] -eq ""){
-                                Write-Host -ForegroundColor Yellow " /"
-                            }else{
-                                Write-Host -ForegroundColor Yellow " " $result[1]
-                            }
-                            $ReturnedResult += $result
+                        } elseif ($result[3] -eq "401" -or $result[3] -eq "403"){
+                            #Find any 401's or 403's for Authentication BruteForcing
+                            Write-Host -ForegroundColor Yellow $result[3] $concat
+                            $ReturnedResult += $concat
                         
                         } else {
                             #Should catch any other status codes including 404
@@ -296,7 +287,7 @@ function Async-Runspaces {
 }
 
 
-function PathScan {
+function AttackCamera {
     [CmdletBinding(ConfirmImpact = 'None')]
     Param(
         [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
@@ -348,14 +339,12 @@ function PathScan {
                                 #Write-Host "Error reading response: $_"
                             }
 
-                            #Take first line of response and check for 200
                             # Extract the status code from the first line
                             $statusLine = $response.Split([Environment]::NewLine)[0]
                             $statusCode = ($statusLine -split ' ')[1].Trim()
 
                             $tcpClient.Close()
-                            #return $response
-                            return @($statusCode, $Path, $IP, $Port)
+                            return @($IP, $Port, $Path, $statusCode)
                         }
                     }
                     catch {
@@ -398,7 +387,7 @@ function PathScan {
 }
 
 <#
-function AuthScan {
+function AuthAttack {
     [CmdletBinding(ConfirmImpact = 'None')]
     Param(
         [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
@@ -492,8 +481,8 @@ function AuthScan {
 
 
 }
-#>
 
+#>
 [array]$AlivePorts = @()
 
     if ($Scan){
@@ -517,7 +506,8 @@ function AuthScan {
 
         if ($AlivePorts){ 
             Start-Sleep -Milliseconds 500
-            $harvest = Async-Runspaces -Target $AlivePorts -Option "PathScan"
+            $PathsToAttack = Async-Runspaces -Target $AlivePorts -Option "AttackCamera"         
+
         } else {
             Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
             Write-Host $AlivePorts
@@ -528,7 +518,5 @@ function AuthScan {
 
 
 }
-
-
 
 #return #[pscustomobject]@{ Address = $IP; Port = $port; Open = $open }
