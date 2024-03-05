@@ -48,7 +48,7 @@ function EyeSpy {
         |    ___|  |  |  -__|__     |  _  |  |  |
         |_______|___  |_____|_______|   __|___  |
                 |_____|             |__|  |_____|   
-                                
+                                               
 =========================================================
                 By: Miiden
 =========================================================
@@ -204,8 +204,10 @@ function Async-Runspaces {
         $runspacePool.Open()
         $runspaces = New-Object System.Collections.ArrayList
 
-        if ($Option = "PortScan"){
+        if ($Option -eq "PortScan"){
             PortScan -Target $Target
+        } elseif ($Option -eq "PathScan"){
+            PathScan -Targets $Target
         }
 
         # Poll the runspaces and display results as they complete
@@ -237,7 +239,7 @@ function Async-Runspaces {
         return $ReturnedResult
 }
 
-
+<#
 function Send-Packets {
         [CmdletBinding(ConfirmImpact = 'None')]
         Param(
@@ -307,6 +309,104 @@ function Send-Packets {
             }
            }
 }
+#>
+
+
+function PathScan {
+    [CmdletBinding(ConfirmImpact = 'None')]
+    Param(
+        [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
+        [string[]] $Targets
+    ) 
+
+    $Paths = @("MyPath", "MyScan", "axis/camera", "11/01", "MyStream")
+    $Timeout = 300
+
+    $scriptBlock = {
+        
+        param ($IP, $Timeout, $Port, $Path)
+
+            $tcpClient = New-Object System.Net.Sockets.TcpClient
+            $asyncResult = $tcpClient.BeginConnect($IP, $Port, $null, $null)
+            $wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
+
+                if ($wait) { 
+                    try {
+                        $tcpClient.EndConnect($asyncResult)
+                        if ($tcpClient.Connected) {
+                            #Port Open
+                            $Stream = $tcpClient.GetStream()
+                            $Reader = New-Object System.IO.StreamReader($Stream)
+                            $Reader.BaseStream.ReadTimeout = $Timeout
+                            $Writer = New-Object System.IO.StreamWriter($Stream)
+
+                            $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
+                            $request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
+                                       "CSeq: 2$CRLF$CRLF"
+
+                            $Writer.Write($request)
+                            $Writer.Flush()
+
+                            $response = ''
+                            try {
+                                Start-Sleep -Milliseconds 100
+                                while ($Stream.CanRead) {
+                                        $line = $Reader.ReadLine()
+                                    if ($line -eq $null) { break }
+                                        $response += $line + $CRLF
+                                }
+                            } catch [System.IO.IOException] {
+                                # Catching the exception without taking any action
+            
+                                # Debugging: Handle timeout or connection closed gracefully
+                                #Write-Host "Error reading response: $_"
+                            }
+
+                            #Debugging Line:
+                            $tcpClient.Close()
+                            return $response
+                        }
+                    }
+                    catch {
+                        #Errorhandling Catch
+                        Write-Host "Error Handling"
+                        $tcpClient.Close()
+                        return "Error with Connection"
+                    }
+                }
+                else {
+                    #Port Closed
+                    Write-Host "Port Closed"
+                    $tcpClient.Close()
+                    return "Error with Connection"
+                }
+            }
+        
+        foreach ($Target in $Targets) {
+
+            $IP = ($Target -split ':')[0]
+            [int]$Port = ($Target -split ':')[1]
+
+            foreach ($Path in $Paths) {
+                $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($IP).AddArgument($Timeout).AddArgument($Port).AddArgument($Path)
+                $runspace.RunspacePool = $runspacePool
+                  
+                [void]$runspaces.Add([PSCustomObject]@{
+                    Runspace     = $runspace
+                    Handle       = $runspace.BeginInvoke()
+                    ComputerName = $IP
+                    Port         = $Port
+                    Path         = $Path
+                    Completed    = $false
+                })
+            }   
+        }
+
+
+
+}
+
+
 
 [array]$AlivePorts = @()
 
@@ -331,7 +431,7 @@ function Send-Packets {
 
         if ($AlivePorts){ 
             Start-Sleep -Milliseconds 500
-            Send-Packets -AlivePorts $AlivePorts
+            $harvest = Async-Runspaces -Target $AlivePorts -Option "PathScan"
         } else {
             Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
             Write-Host $AlivePorts
