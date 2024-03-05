@@ -11,6 +11,12 @@ If it's a 401 or 403, it means that the credentials are wrong but the route migh
 If it's a 404, it means that the route is incorrect but the credentials might be okay.
 If it's a 200, the stream is accessed successfully.
 
+Step 1: Scan all routes with no credentials, look for 200, if found, No-Auth - Camera Obtained
+Step 2: Check for 404 results and dont scan that route again - its wrong
+Step 3: Of the 401 and 403 routes, Attempt credential attack, look for 200 again
+Step 4: If nothing else is found, then Credentials and Route not found, attack failed.
+
+Roll in Early Termination of 200 requests.
 
 #>
 
@@ -255,78 +261,6 @@ function Async-Runspaces {
         return $ReturnedResult
 }
 
-<#
-function Send-Packets {
-        [CmdletBinding(ConfirmImpact = 'None')]
-        Param(
-            [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
-            [string[]] $AlivePorts
-        )   
-
-        foreach ($AlivePort in $AlivePorts){
-        
-            $IP = ($AlivePort -split ':')[0]
-            [int]$Port = ($AlivePort -split ':')[1]
-            $Encoding = [System.Text.Encoding]::ASCII
-            [int] $TimeoutMilliseconds = 100 
-            $open = $false
-
-            $Sock = New-Object System.Net.Sockets.TcpClient
-
-            try {
-                $connectionResult = $Sock.BeginConnect($IP,$Port,$null,$null)
-                $connectionSuccess = $connectionResult.AsyncWaitHandle.WaitOne($TimeoutMilliseconds)
-
-                if ($connectionSuccess -and $Sock.Connected) { 
-                    $open = $true 
-                } 
-                else { 
-                    throw "Connection attempt failed or timed out" 
-                }
-            }
-            catch {
-                Write-Host "Failed to connect to $IP`:$Port"
-            }
-
-            if ($open) {
-                $Stream = $Sock.GetStream()
-                $Reader = New-Object System.IO.StreamReader($Stream)
-                $Reader.BaseStream.ReadTimeout = $TimeoutMilliseconds
-                $Writer = New-Object System.IO.StreamWriter($Stream)
-
-                $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
-                $request = "DESCRIBE rtsp://$IP`:$Port/MyStream RTSP/1.0$CRLF" +
-                           "CSeq: 2$CRLF$CRLF"
-
-                $Writer.Write($request)
-                $Writer.Flush()
-
-                $response = ''
-                try {
-                    Start-Sleep -Milliseconds 100
-                    while ($Stream.CanRead) {
-                        $line = $Reader.ReadLine()
-                        if ($line -eq $null) { break }
-                        $response += $line + $CRLF
-                    }
-                } catch [System.IO.IOException] {
-                    # Catching the exception without taking any action
-            
-                    # Debugging: Handle timeout or connection closed gracefully
-                    #Write-Host "Error reading response: $_"
-                }
-
-                Write-Host $response
-
-                $Reader.Dispose()
-                $Writer.Dispose()
-                $Stream.Dispose()
-                $Sock.Close()
-            }
-           }
-}
-#>
-
 
 function PathScan {
     [CmdletBinding(ConfirmImpact = 'None')]
@@ -423,7 +357,100 @@ function PathScan {
 
 }
 
+function AuthScan {
+    [CmdletBinding(ConfirmImpact = 'None')]
+    Param(
+        [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
+        [string[]] $Targets
+    ) 
 
+    #$Paths = @("", "MyPath", "MyScan", "axis/camera", "11/01", "MyStream")
+    $Timeout = 300
+
+    $scriptBlock = {
+        
+        param ($IP, $Timeout, $Port, $Path)
+
+            $tcpClient = New-Object System.Net.Sockets.TcpClient
+            $asyncResult = $tcpClient.BeginConnect($IP, $Port, $null, $null)
+            $wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
+
+                if ($wait) { 
+                    try {
+                        $tcpClient.EndConnect($asyncResult)
+                        if ($tcpClient.Connected) {
+                            #Port Open
+                            $Stream = $tcpClient.GetStream()
+                            $Reader = New-Object System.IO.StreamReader($Stream)
+                            $Reader.BaseStream.ReadTimeout = $Timeout
+                            $Writer = New-Object System.IO.StreamWriter($Stream)
+
+                            $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
+                            $request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
+                                       "CSeq: 2$CRLF$CRLF" #+
+                                       #"Authorization: Basic YWRtaW46YWRtaW4=$CRLF$CRLF"
+
+                            $Writer.Write($request)
+                            $Writer.Flush()
+
+                            $response = ''
+                            try {
+                                Start-Sleep -Milliseconds 100
+                                while ($Stream.CanRead) {
+                                        $line = $Reader.ReadLine()
+                                    if ($line -eq $null) { break }
+                                        $response += $line + $CRLF
+                                }
+                            } catch [System.IO.IOException] {
+                                # Catching the exception without taking any action
+            
+                                # Debugging: Handle timeout or connection closed gracefully
+                                #Write-Host "Error reading response: $_"
+                            }
+
+                            #Debugging Line:
+                            $tcpClient.Close()
+                            return $response
+                        }
+                    }
+                    catch {
+                        #Errorhandling Catch
+                        Write-Host "Error Handling"
+                        $tcpClient.Close()
+                        return "Error with Connection"
+                    }
+                }
+                else {
+                    #Port Closed
+                    Write-Host "Port Closed"
+                    $tcpClient.Close()
+                    return "Error with Connection"
+                }
+            }
+        
+        foreach ($Target in $Targets) {
+
+            $IP = ($Target -split ':')[0]
+            [int]$Port = ($Target -split ':')[1]
+
+            foreach ($Path in $Paths) {
+                $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($IP).AddArgument($Timeout).AddArgument($Port).AddArgument($Path)
+                $runspace.RunspacePool = $runspacePool
+                  
+                [void]$runspaces.Add([PSCustomObject]@{
+                    Runspace     = $runspace
+                    Handle       = $runspace.BeginInvoke()
+                    ComputerName = $IP
+                    Port         = $Port
+                    Path         = $Path
+                    Completed    = $false
+                })
+            }   
+        }
+
+
+
+}
 
 [array]$AlivePorts = @()
 
