@@ -57,4 +57,4 @@ EyeSpy -Help
 Contributions to EyeSpy are welcome. Feel free to fork the repository, make improvements, and submit pull requests.
 
 ## License
-EyeSpy is licensed under the [MIT](https://github.com/Miiden/BasicObfuscation/blob/main/LICENSE.md) License.
+EyeSpy is licensed under the [MIT](https://github.com/Miiden/EyeSpy/blob/main/LICENSE.md) License.
