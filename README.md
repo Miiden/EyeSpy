@@ -28,9 +28,12 @@ There is no specific installation required for EyeSpy. Simply download or clone 
 
 EyeSpy provides several command-line options to customize its behavior:
 
-- `-Scan <IP>`: Scan a single IP address for open RTSP ports.
-- `-FullAuto <IP/CIDR>`: Perform a full automatic scan within a specified IP range (CIDR notation).
-- `-PathScan <IP/CIDR>`: Scan for open RTSP ports and spray common paths.
+- `-Scan <IP/CIDR>`: Scan a single IP or CIDR range for open RTSP ports.
+
+- `-PathScan <IP/CIDR>`: Scan for open RTSP ports and spray for common paths. Returns any camera with no authentication required, and a list of 401 and 403 responses showing possible paths, Drops 404's.
+  
+- `-FullAuto <IP/CIDR>`: Perform a fully automatic scan within a specified IP range (CIDR notation). This scan will find open ports, and bruteforce each 401/403 status code path with around 1000 combinations of common credentials.
+  
 - `-Help`: Display the help menu, showing usage instructions and examples.
 
 ## Examples
