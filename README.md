@@ -4,6 +4,9 @@
 
 EyeSpy is a tool designed to enumerate and gain access to IP Cameras via RTSP. It provides a flexible and efficient way to scan for open RTSP ports, discover available paths, and attempt common credential spraying attacks.
 
+OpSec Info:
+This tool is not quiet at all.
+
 ## Table of Contents
 
 - [Introduction](#introduction)
@@ -43,13 +46,13 @@ EyeSpy provides several command-line options to customize its behavior:
 ```powershell
 EyeSpy -Scan 192.168.0.123
 ```
-### Full Automatic Scan
-```powershell
-EyeSpy -FullAuto 192.168.0.1/24
-```
 ### Path Scan
 ```powershell
 EyeSpy -PathScan 10.0.0.0/16
+```
+### Full Automatic Scan
+```powershell
+EyeSpy -FullAuto 192.168.0.1/24
 ```
 ### Display Help
 ```powershell
