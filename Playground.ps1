@@ -141,28 +141,37 @@ function Get-OpenRTSPPorts {
     )
     
     begin {
-        
         Write-Host "Checking for IP's with Open RTSP Ports`:`r`n"
-    
-    } process {
-        
+        $activity = "Checking for IP's with Open RTSP Ports"
+        $totalIPAddresses = $IPAddress.Count
+        $currentIPIndex = 0
+        $progressId = Get-Random
+        Write-Progress -Id $progressId -Activity $activity -Status "Starting" -PercentComplete 0
+    }
+
+    process {
         foreach ($ip in $IPAddress) {
             $openPorts = @()
             $ports = 554, 8554, 5554
 
+            $currentIPIndex++
+            $percentage = ($currentIPIndex / $totalIPAddresses) * 100
+            $status = "Scanning $ip"
+            Write-Progress -Id $progressId -Activity $activity -Status $status -PercentComplete $percentage
+
             foreach ($port in $ports) {
                 try {
                     $tcpClient = New-Object System.Net.Sockets.TcpClient
-                    $tcpClient.SendTimeout = 150  # Set a send timeout
-                    $tcpClient.ReceiveTimeout = 150 # Set a receive timeout
-                    $awaitResult = $tcpClient.BeginConnect($ip, $port, $null, $null) # Begin the Async Connection
-                    $success = $awaitResult.AsyncWaitHandle.WaitOne(150, $false)
+                    $tcpClient.SendTimeout = 200
+                    $tcpClient.ReceiveTimeout = 200
+                    $awaitResult = $tcpClient.BeginConnect($ip, $port, $null, $null)
+                    $success = $awaitResult.AsyncWaitHandle.WaitOne(250, $false)
 
                     if ($success) {
                         $tcpClient.EndConnect($awaitResult)
                         if ($tcpClient.Connected) {
                             Write-Host -NoNewline -ForegroundColor Green "[+]"
-                            Write-Host -NoNewline  " Open`: "
+                            Write-Host -NoNewline " Open: "
                             Write-Host -ForegroundColor Green "$ip`:$port"
                             $openPorts += $port
                             $tcpClient.Close()
@@ -188,11 +197,18 @@ function Get-OpenRTSPPorts {
                     }
                 }
             }
-        }  
-    } end {
-    
-    Write-Host "`r`n=========================================================`r`n"
-    
+        }
+    }
+
+    end {
+        Write-Progress -Id $progressId -Activity $activity -Status "Completed" -PercentComplete 100 -Completed
+
+        if ($openPorts.Count -eq 0) {
+            Write-Host -NoNewline -ForegroundColor Red "[-]"
+            Write-Host " No Open RTSP Ports detected!"
+        }
+
+        Write-Host "`r`n=========================================================`r`n"
     }
 }
 
@@ -444,7 +460,20 @@ function Scan {
    
 }
 
+function PathScan {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Targets
+        )
 
+    $local:ipRange = Get-IpRange -Target $Targets
+    $local:openPorts = Get-OpenRTSPPorts -IPAddress $local:ipRange
+    
+    if ($local:openPorts.Count -gt 0) {
+        $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $openPorts
+    }
+}
 
 function FullAuto {
     [CmdletBinding()]
@@ -485,9 +514,17 @@ function FullAuto {
 }
 
 if ($Search) {
+
     Scan -Targets $Search
-} elseif ($auto){
-    FullAuto -Targets $auto
+
+} elseif ($PathScan){
+
+    PathScan -Targets $PathScan
+
+} elseif ($Auto){
+
+    FullAuto -Targets $Auto
+
 } 
 
 
