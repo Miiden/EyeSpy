@@ -17,20 +17,26 @@ function EyeSpy {
     if ($Help) {
 
         $HelpOutput = @("
-[ Help ] ================================================
-
-                    EyeSpy 
-                    by: Miiden
-
+=========================================================
+                
+=========================================================
+         _______             _______             
+        |    ___.--.--.-----|     __.-----.--.--.
+        |    ___|  |  |  -__|__     |  _  |  |  |
+        |_______|___  |_____|_______|   __|___  |
+                |_____|             |__|  |_____|   
+                                
+=========================================================
+                By: Miiden
 =========================================================
  
+ Check GitHub for more detailed descriptions.
+
  Example Usage:
 
  EyeSpy -Search 192.168.0.1/24
 
- EyeSpy -PathScan 192.168.0.123
-
- EyeSpy -AuthAttack 192.168.0.234
+ EyeSpy -NoAuth 192.168.0.123
 
  Eyespy -Auto 192.168.0.1/24
 
@@ -375,8 +381,10 @@ function Get-ValidRTSPCredential {
         if ($validCred) {
             Write-Progress -Id $parentId -Activity $parentActivity -Status "Success" -PercentComplete 100 -Completed
             Write-Progress -Id $childId -Activity $childActivity -Status "Success" -PercentComplete 100 -Completed -ParentId $parentId
+            
             return $validCred
-        } else {
+
+            } else {
             $childStatus = "Failed"
             Write-Progress -Id $childId -Activity $childActivity -Status $childStatus -PercentComplete 100 -Completed -ParentId $parentId
         }
@@ -387,7 +395,9 @@ function Get-ValidRTSPCredential {
     Write-Progress -Id $parentId -Activity $parentActivity -Status "Failed" -PercentComplete 100 -Completed
 
     return $null
+
 }
+
 
 function Test-RTSPAuth {
     [CmdletBinding()]
@@ -500,18 +510,16 @@ function FullAuto {
     $ipRange = Get-IpRange -Target $Targets
     $openPorts = Get-OpenRTSPPorts -IPAddress $ipRange
     $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $openPorts
+    $credentials = GenerateCreds
+    $validCredentials = @()
 
     if ($authRequiredPaths.Count -gt 0) {
-        $credentials = GenerateCreds
-        $validCredentials = @()
 
         Write-Host "=========================================================`r`n"
         Write-Host "Beginning Password Spray:`r`n"
 
         foreach ($authPath in $authRequiredPaths) {
-            $validCredFound = $false
-
-            $validCred = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
+            $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
 
             if ($validCred) {
                 $validCredentials += [PSCustomObject]@{
@@ -520,12 +528,8 @@ function FullAuto {
                     Path        = $authPath.Path
                     Credentials = $validCred
                 }
-                $validCredFound = $true
             }
 
-            if ($validCredFound) {
-                break
-            }
         }
 
         return $validCredentials
@@ -553,6 +557,5 @@ if ($Search) {
     FullAuto -Targets $Auto
 
 } 
-
 
 }
