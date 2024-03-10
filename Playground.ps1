@@ -4,7 +4,7 @@ function EyeSpy {
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [String]$Search,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
-        [String]$PathScan,
+        [String]$NoAuth,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [String]$AuthAttack,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
@@ -57,7 +57,7 @@ function EyeSpy {
 =========================================================
     ")
 
-    if (!$Search -and !$Auto -and !$PathScan -and !$AuthAttack) {
+    if (!$Search -and !$Auto -and !$NoAuth -and !$AuthAttack) {
     
         Write-Host
         Write-Host "[!] " -ForegroundColor "Red" -NoNewline
@@ -139,9 +139,9 @@ function Get-OpenRTSPPorts {
         [Parameter(Mandatory, ValueFromPipeline)]
         [string[]]$IPAddress
     )
-    
+
     begin {
-        Write-Host "Checking for IP's with Open RTSP Ports`:`r`n"
+        Write-Host "Checking for IP's with Open RTSP Ports:`r`n"
         $activity = "Checking for IP's with Open RTSP Ports"
         $totalIPAddresses = $IPAddress.Count
         $currentIPIndex = 0
@@ -150,8 +150,10 @@ function Get-OpenRTSPPorts {
     }
 
     process {
+        $openPorts = @()
+
         foreach ($ip in $IPAddress) {
-            $openPorts = @()
+            $portsForIP = @()
             $ports = 554, 8554, 5554
 
             $currentIPIndex++
@@ -173,7 +175,11 @@ function Get-OpenRTSPPorts {
                             Write-Host -NoNewline -ForegroundColor Green "[+]"
                             Write-Host -NoNewline " Open: "
                             Write-Host -ForegroundColor Green "$ip`:$port"
-                            $openPorts += $port
+                            $portsForIP += [PSCustomObject]@{
+                                IPAddress = $ip
+                                Port      = $port
+                                Status    = "Open"
+                            }
                             $tcpClient.Close()
                         }
                     }
@@ -188,26 +194,26 @@ function Get-OpenRTSPPorts {
                 }
             }
 
-            if ($openPorts.Count -gt 0) {
-                foreach ($port in $openPorts) {
-                    [PSCustomObject]@{
-                        IPAddress = $ip
-                        Port      = $port
-                        Status    = "Open"
-                    }
-                }
-            }
+            $openPorts += $portsForIP
         }
+
+        return $openPorts
     }
 
     end {
         Write-Progress -Id $progressId -Activity $activity -Status "Completed" -PercentComplete 100 -Completed
+        
+        
+        # Check if any open ports were found
+        $anyOpenPortsFound = $openPorts.Count -gt 0
 
-        if ($openPorts.Count -eq 0) {
+        # Display the message if no open ports were found
+        if (-not $anyOpenPortsFound) {
             Write-Host -NoNewline -ForegroundColor Red "[-]"
-            Write-Host " No Open RTSP Ports detected!"
+            Write-Host -NoNewline " No Open RTSP Ports detected.`r`n"
         }
-
+        
+        
         Write-Host "`r`n=========================================================`r`n"
     }
 }
@@ -457,22 +463,31 @@ function Scan {
 
     $ipRange = Get-IpRange -Target $Targets
     $openPorts = Get-OpenRTSPPorts -IPAddress $ipRange
+
+    Write-Host "Scan completed.`r`n" -ForegroundColor Green
+    Write-Host "=========================================================`r`n"
    
 }
 
-function PathScan {
+function NoAuthScan {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
         [string]$Targets
-        )
+    )
 
     $local:ipRange = Get-IpRange -Target $Targets
     $local:openPorts = Get-OpenRTSPPorts -IPAddress $local:ipRange
-    
-    if ($local:openPorts.Count -gt 0) {
+
+    # Check if there are any unique IP addresses with open ports
+    $uniqueIPsWithOpenPorts = $local:openPorts | Select-Object -ExpandProperty IPAddress -Unique
+
+    if ($uniqueIPsWithOpenPorts.Count -gt 0) {
         $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $openPorts
     }
+    
+    Write-Host "Scan completed.`r`n" -ForegroundColor Green
+    Write-Host "=========================================================`r`n"
 }
 
 function FullAuto {
@@ -480,46 +495,58 @@ function FullAuto {
     param (
         [Parameter(Mandatory)]
         [string]$Targets
-        )
+    )
 
     $ipRange = Get-IpRange -Target $Targets
     $openPorts = Get-OpenRTSPPorts -IPAddress $ipRange
     $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $openPorts
-    $credentials = GenerateCreds
-    $validCredentials = @()
 
-    Write-Host "=========================================================`r`n"
-    Write-Host "Beginning Password Spray:`r`n"
+    if ($authRequiredPaths.Count -gt 0) {
+        $credentials = GenerateCreds
+        $validCredentials = @()
 
-    foreach ($authPath in $authRequiredPaths) {
-        $validCredFound = $false  # Flag to track if a valid credential is found for the current IP:Port
+        Write-Host "=========================================================`r`n"
+        Write-Host "Beginning Password Spray:`r`n"
 
-        $validCred = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
-        if ($validCred) {
-            $validCredentials += [PSCustomObject]@{
-                IPAddress = $authPath.IPAddress
-                Port      = $authPath.Port
-                Path      = $authPath.Path
-                Credentials = $validCred
+        foreach ($authPath in $authRequiredPaths) {
+            $validCredFound = $false
+
+            $validCred = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
+
+            if ($validCred) {
+                $validCredentials += [PSCustomObject]@{
+                    IPAddress   = $authPath.IPAddress
+                    Port        = $authPath.Port
+                    Path        = $authPath.Path
+                    Credentials = $validCred
+                }
+                $validCredFound = $true
             }
-            $validCredFound = $true  # Set the flag to true if a valid credential is found
+
+            if ($validCredFound) {
+                break
+            }
         }
 
-        if ($validCredFound) {
-            break  # Exit the loop if a valid credential is found for the current IP:Port
-        }
+        return $validCredentials
     }
-    return $validCredentials
-   
+    else {
+        
+        Write-Host "=========================================================`r`n"
+        Write-Host "No authentication required, see results above.`r`n"
+        Write-Host "Scan completed.`r`n" -ForegroundColor Green
+        Write-Host "=========================================================`r`n"
+
+    }
 }
 
 if ($Search) {
 
     Scan -Targets $Search
 
-} elseif ($PathScan){
+} elseif ($NoAuth){
 
-    PathScan -Targets $PathScan
+    NoAuthScan -Targets $NoAuth
 
 } elseif ($Auto){
 
