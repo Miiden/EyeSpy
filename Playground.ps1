@@ -153,10 +153,10 @@ function Get-OpenRTSPPorts {
             foreach ($port in $ports) {
                 try {
                     $tcpClient = New-Object System.Net.Sockets.TcpClient
-                    $tcpClient.SendTimeout = 200  # Set a send timeout
-                    $tcpClient.ReceiveTimeout = 200 # Set a receive timeout
+                    $tcpClient.SendTimeout = 150  # Set a send timeout
+                    $tcpClient.ReceiveTimeout = 150 # Set a receive timeout
                     $awaitResult = $tcpClient.BeginConnect($ip, $port, $null, $null) # Begin the Async Connection
-                    $success = $awaitResult.AsyncWaitHandle.WaitOne(250, $false)
+                    $success = $awaitResult.AsyncWaitHandle.WaitOne(150, $false)
 
                     if ($success) {
                         $tcpClient.EndConnect($awaitResult)
@@ -432,6 +432,20 @@ function Test-RTSPAuth {
     return $null
 }
 
+function Scan {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Targets
+        )
+
+    $ipRange = Get-IpRange -Target $Targets
+    $openPorts = Get-OpenRTSPPorts -IPAddress $ipRange
+   
+}
+
+
+
 function FullAuto {
     [CmdletBinding()]
     param (
@@ -457,7 +471,7 @@ function FullAuto {
                 IPAddress = $authPath.IPAddress
                 Port      = $authPath.Port
                 Path      = $authPath.Path
-                Credential = $validCred
+                Credentials = $validCred
             }
             $validCredFound = $true  # Set the flag to true if a valid credential is found
         }
@@ -470,9 +484,11 @@ function FullAuto {
    
 }
 
-if ($auto){
+if ($Search) {
+    Scan -Targets $Search
+} elseif ($auto){
     FullAuto -Targets $auto
-}
+} 
 
 
 }
