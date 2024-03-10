@@ -2,7 +2,7 @@
 
 ![EyeSpy Logo](https://github.com/Miiden/EyeSpy/blob/main/eyespy_logo.png)
 
-EyeSpy is a tool designed to enumerate and gain access to IP Cameras via RTSP. It provides a flexible and efficient way to scan for open RTSP ports, discover available paths, and attempt common credential spraying attacks.
+EyeSpy is a tool designed to enumerate and gain access to IP Cameras via RTSP. It provides a flexible and efficient way to scan for open RTSP ports, Check if authentication is required and attempt common credential spraying attacks.
 
 OpSec Info:
 This tool is not quiet at all.
@@ -18,14 +18,14 @@ This tool is not quiet at all.
 
 ## Introduction
 
-EyeSpy is developed by Miiden and utilizes PowerShell scripting to perform various tasks related to IP camera enumeration and access.
-EyeSpy is designed to enumerate and gain access to IP Cameras via RTSP. It provides a flexible and efficient way to scan for open RTSP ports, discover available paths, and attempt common credential spraying attacks.
-
-It is currently a work in progress and as always has a few bugs, feel free to Contribute
+EyeSpy is developed by Miiden and utilizes PowerShell to help with penetration tests and research from a windows environment.
+EyeSpy is designed to enumerate and gain access to IP Cameras via RTSP. It provides a flexible and efficient way to scan for open RTSP ports, Check if authentication is required and attempt common credential spraying attacks.
 
 ## Installation
 
-There is no specific installation required for EyeSpy. Simply download or clone the script from the [GitHub repository](https://github.com/Miiden/EyeSpy) and run it using PowerShell.
+There is no specific installation required for EyeSpy. Simply download the script from the [GitHub repository](https://github.com/Miiden/EyeSpy) and run it using PowerShell.
+
+
 
 ## Usage
 
@@ -33,9 +33,9 @@ EyeSpy provides several command-line options to customize its behavior:
 
 - `-Scan <IP/CIDR>`: Scan a single IP or CIDR range for open RTSP ports.
 
-- `-PathScan <IP/CIDR>`: Scan for open RTSP ports and spray for common paths. Returns any camera with no authentication required, and a list of 401 and 403 responses showing possible paths, Drops 404's.
+- `-NoAuth <IP/CIDR>`: Scan for open RTSP ports and spray for common paths. Returns any camera with no authentication required, by checking common camera paths with no authentication header.
   
-- `-FullAuto <IP/CIDR>`: Perform a fully automatic scan within a specified IP range (CIDR notation). This scan will find open ports, and bruteforce each 401/403 status code path with around 1000 combinations of common credentials.
+- `-Auto <IP/CIDR>`: Perform a fully automatic scan within a specified IP range (CIDR notation). This scan will find open ports, and spray each path with combinations of common/default credentials.
   
 - `-Help`: Display the help menu, showing usage instructions and examples.
 
@@ -48,11 +48,11 @@ EyeSpy -Scan 192.168.0.123
 ```
 ### Path Scan
 ```powershell
-EyeSpy -PathScan 10.0.0.0/16
+EyeSpy -NoAuth 10.0.0.0/16
 ```
 ### Full Automatic Scan
 ```powershell
-EyeSpy -FullAuto 192.168.0.1/24
+EyeSpy -Auto 192.168.0.1/24
 ```
 ### Display Help
 ```powershell
