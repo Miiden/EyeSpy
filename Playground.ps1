@@ -331,16 +331,38 @@ function Get-ValidRTSPCredential {
         [string[]]$Credentials
     )
 
-    Write-Host "=========================================================`r`n"
-    Write-Host "Beginning Password Spray:`r`n"
+    $pathStep = 1
+    $totalPaths = 1
+    $parentActivity = "Checking path $Path"
+    $parentStatus = "Starting"
+    $parentId = Get-Random
+
+    $credentialStep = 0
+    $totalCredentials = $Credentials.Count
 
     foreach ($cred in $Credentials) {
+        $credentialStep++
+        $childActivity = "Trying credential $($credentialStep)/$totalCredentials"
+        $childStatus = "Working"
+        $childId = Get-Random
+
+        $parentProgress = [math]::Floor(($credentialStep / $totalCredentials) * 100)
+        Write-Progress -Id $parentId -Activity $parentActivity -Status $parentStatus -PercentComplete $parentProgress -CurrentOperation $childActivity -SecondsRemaining (-1)
+
         $validCred = Test-RTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
         if ($validCred) {
+            Write-Progress -Id $parentId -Activity $parentActivity -Status "Success" -PercentComplete 100 -Completed
+            Write-Progress -Id $childId -Activity $childActivity -Status "Success" -PercentComplete 100 -Completed -ParentId $parentId
             return $validCred
+        } else {
+            $childStatus = "Failed"
+            Write-Progress -Id $childId -Activity $childActivity -Status $childStatus -PercentComplete 100 -Completed -ParentId $parentId
         }
-   
+
+        Write-Progress -Id $parentId -Activity $parentActivity -Status $parentStatus -PercentComplete $parentProgress -CurrentOperation $childActivity -SecondsRemaining (-1)
     }
+
+    Write-Progress -Id $parentId -Activity $parentActivity -Status "Failed" -PercentComplete 100 -Completed
 
     return $null
 }
@@ -422,6 +444,9 @@ function FullAuto {
     $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $openPorts
     $credentials = GenerateCreds
     $validCredentials = @()
+
+    Write-Host "=========================================================`r`n"
+    Write-Host "Beginning Password Spray:`r`n"
 
     foreach ($authPath in $authRequiredPaths) {
         $validCredFound = $false  # Flag to track if a valid credential is found for the current IP:Port
