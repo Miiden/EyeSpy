@@ -1,6 +1,6 @@
 # EyeSpy
 
-![EyeSpy Logo](https://github.com/Miiden/EyeSpy/blob/main/eyespy_logo.png)
+![EyeSpy Logo](https://github.com/Miiden/EyeSpy/blob/main/EyeSpyLogo.png)
 
 EyeSpy is a tool designed to enumerate and gain access to IP Cameras via RTSP. It provides a flexible and efficient way to scan for open RTSP ports, Check if authentication is required and attempt common credential spraying attacks.
 
