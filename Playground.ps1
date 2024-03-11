@@ -519,7 +519,9 @@ function FullAuto {
         Write-Host "=========================================================`r`n"
         Write-Host "Beginning Password Spray:`r`n"
 
-        foreach ($authPath in $authRequiredPaths) {
+        $index = 0
+        while ($index -lt $authRequiredPaths.Count) {
+            $authPath = $authRequiredPaths[$index]
             $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
 
             if ($result.CredentialFound) {
@@ -532,9 +534,8 @@ function FullAuto {
 
                 # Remove the current IP:Port combination from the array
                 $authRequiredPaths = $authRequiredPaths | Where-Object { ($_.IPAddress -ne $authPath.IPAddress) -or ($_.Port -ne $authPath.Port) }
-
-                # Exit the loop if a valid credential is found
-                break
+            } else {
+                $index++
             }
         }
 
