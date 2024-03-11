@@ -46,23 +46,34 @@ EyeSpy provides several command-line options to customize its behavior:
 
 ## Examples
 
-# Search for common open RTSP ports on a single IP or across a range.
+### Search for common open RTSP ports on a single IP or across a range.
+```powershell
 EyeSpy -Search 192.168.0.1/24
-
-# Searches for common open RTSP ports and checks common paths if authentication is required.
+```
+### Searches for common open RTSP ports and checks common paths if authentication is required.
+```powershell
 EyeSpy -NoAuth 192.168.0.123
+```
  
-# Performs a password spraying attack with common credentials on a known open IP:Port
-EyeSpy -AuthAttack 192.168.0.123
+### Performs a password spraying attack with common credentials on a known open IP:Port
+```powershell
+EyeSpy -AuthAttack 192.168.0.66:8554
+```
 
-# Performs a password spraying attack with common credentials on a known open IP:Port/Path
-EyeSpy -AuthAttack 192.168.0.123 -Path 'MyStream'
+### Performs a password spraying attack with common credentials on a known open IP:Port/Path
+```powershell
+EyeSpy -AuthAttack 192.168.0.123:554 -Path 'MyStream'
+```
 
-# Performs all of the above automatically across a single IP or Range
+### Performs all of the above automatically across a single IP or Range
+```powershell
 Eyespy -Auto 192.168.0.1/24
+```
 
-# Displays the Help
-Eyespy -Help 
+### Displays the Help
+```powershell
+Eyespy -Help
+```
 
 ## Contributing
 Contributions to EyeSpy are welcome. Feel free to fork the repository, make improvements, and submit pull requests.
