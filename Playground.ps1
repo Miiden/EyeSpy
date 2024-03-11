@@ -361,7 +361,7 @@ function Get-ValidRTSPCredential {
 
     $pathStep = 1
     $totalPaths = 1
-    $parentActivity = "Checking path $Path"
+    $parentActivity = "Checking`: $IP`:$Port/$Path"
     $parentStatus = "Starting"
     $parentId = Get-Random
 
@@ -381,23 +381,24 @@ function Get-ValidRTSPCredential {
         if ($validCred) {
             Write-Progress -Id $parentId -Activity $parentActivity -Status "Success" -PercentComplete 100 -Completed
             Write-Progress -Id $childId -Activity $childActivity -Status "Success" -PercentComplete 100 -Completed -ParentId $parentId
-            
-            return $validCred
 
-            } else {
+            return [PSCustomObject]@{
+                Credential = $validCred
+                CredentialFound = $true
+            }
+        } else {
             $childStatus = "Failed"
             Write-Progress -Id $childId -Activity $childActivity -Status $childStatus -PercentComplete 100 -Completed -ParentId $parentId
         }
-
-        Write-Progress -Id $parentId -Activity $parentActivity -Status $parentStatus -PercentComplete $parentProgress -CurrentOperation $childActivity -SecondsRemaining (-1)
     }
 
     Write-Progress -Id $parentId -Activity $parentActivity -Status "Failed" -PercentComplete 100 -Completed
 
-    return $null
-
+    return [PSCustomObject]@{
+        Credential = $null
+        CredentialFound = $false
+    }
 }
-
 
 function Test-RTSPAuth {
     [CmdletBinding()]
@@ -521,26 +522,29 @@ function FullAuto {
         foreach ($authPath in $authRequiredPaths) {
             $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
 
-            if ($validCred) {
+            if ($result.CredentialFound) {
                 $validCredentials += [PSCustomObject]@{
                     IPAddress   = $authPath.IPAddress
                     Port        = $authPath.Port
                     Path        = $authPath.Path
-                    Credentials = $validCred
+                    Credentials = $result.Credential
                 }
-            }
 
+                # Remove the current IP:Port combination from the array
+                $authRequiredPaths = $authRequiredPaths | Where-Object { ($_.IPAddress -ne $authPath.IPAddress) -or ($_.Port -ne $authPath.Port) }
+
+                # Exit the loop if a valid credential is found
+                break
+            }
         }
 
         return $validCredentials
     }
     else {
-        
         Write-Host "=========================================================`r`n"
         Write-Host "No authentication required, see results above.`r`n"
         Write-Host "Scan completed.`r`n" -ForegroundColor Green
         Write-Host "=========================================================`r`n"
-
     }
 }
 
