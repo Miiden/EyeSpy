@@ -76,6 +76,9 @@ EyeSpy -AuthAttack 192.168.0.123:554 -Path 'MyStream'
 ```powershell
 Eyespy -Auto 192.168.0.1/24
 ```
+<p align="Left">
+<img src="Images/AutoRange.png" width="425" height="560">
+</p>
 
 ### Displays the Help
 ```powershell
