@@ -260,7 +260,7 @@ function Get-ValidRTSPPaths {
         [PSCustomObject[]]$OpenPorts
     )
 
-    Paths = @( "", "0/1", "0/video1", "1", "1.AMP", "1/h264major", "1/main", "1/stream1", "1080p", 
+    $Paths = @( "", "0/1", "0/video1", "1", "1.AMP", "1/h264major", "1/main", "1/stream1", "1080p", 
     "11", "12", "125", "1440p", "480p", "4K", "666", "720p", "access_code", "access_name_for_stream_1_to_5",
     "api/mjpegvideo.cgi", "av0_0", "av2", "avc", "avn=2", "AVStream1_1", "axis-media/media.amp",
     "axis-media/media.amp?camera=1", "axis-media/media.amp?videocodec=h264", "cam", "cam/realmonitor",
