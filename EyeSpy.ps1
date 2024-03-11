@@ -173,8 +173,8 @@ function Get-OpenRTSPPorts {
     )
 
     begin {
-        Write-Host "Checking for IP's with Open RTSP Ports:`r`n"
-        $activity = "Checking for IP's with Open RTSP Ports"
+        Write-Host "Checking for IPs with Open RTSP Ports:`r`n"
+        $activity = "Checking for IPs with Open RTSP Ports"
         $totalIPAddresses = $IPAddress.Count
         $currentIPIndex = 0
         $progressId = Get-Random
@@ -248,7 +248,7 @@ function Get-OpenRTSPPorts {
         
         
         Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
-        Write-Host " Valid IP's With Open Port's Discovered.`r`n"
+        Write-Host " Valid IPs With Open Ports Discovered.`r`n"
         Write-Host "========================================================="
     }
 }
@@ -392,8 +392,7 @@ function Get-ValidRTSPCredential {
         [string[]]$Credentials
     )
 
-    $pathStep = 1
-    $totalPaths = 1
+
     $parentActivity = "Checking`: $IP`:$Port/$Path"
     $parentStatus = "Starting"
     $parentId = Get-Random
@@ -506,7 +505,7 @@ function Scan {
         )
 
     $ipRange = Get-IpRange -Target $Targets
-    $openPorts = Get-OpenRTSPPorts -IPAddress $ipRange
+    Get-OpenRTSPPorts -IPAddress $ipRange
 
     Write-Host "`r`nScan completed.`r`n" -ForegroundColor Green
     Write-Host "=========================================================`r`n"
@@ -527,7 +526,7 @@ function NoAuthScan {
     $uniqueIPsWithOpenPorts = $local:openPorts | Select-Object -ExpandProperty IPAddress -Unique
 
     if ($uniqueIPsWithOpenPorts.Count -gt 0) {
-        $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $openPorts
+       $variableToStopSpam = Get-ValidRTSPPaths -OpenPorts $openPorts
     }
     
     Write-Host "Scan completed.`r`n" -ForegroundColor Green
@@ -705,7 +704,13 @@ if ($Search) {
 
     if ($AuthAttack -match '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}:\b((6553[0-5])|(655[0-2][0-9])|(65[0-4][0-9]{2})|(6[0-4][0-9]{3})|([1-5][0-9]{4})|([0-5]{0,5})|([0-9]{1,4}))\b$') {
         if ($Path) {
-            AuthAttack -Target $AuthAttack -Path $Path
+            Write-Host -NoNewline -ForegroundColor Yellow "[?]"
+			Write-Host " Please note that if no credentials are found the path could be invalid."
+			Write-Host -NoNewline -ForegroundColor Yellow "[?]"
+			Write-Host " Try with -NoAuth or -Auto next.`r`n"
+			
+			AuthAttack -Target $AuthAttack -Path $Path
+
         } else {
             AuthAttack -Target $AuthAttack
     }
