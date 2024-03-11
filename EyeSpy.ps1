@@ -260,7 +260,7 @@ function Get-ValidRTSPPaths {
         [PSCustomObject[]]$OpenPorts
     )
 
-    $Paths = @( "", "MyStream", "/live/ch01_0", "0/1", "1/main", "0/video1", "1", "1.AMP", "1/h264major", "1/stream1",
+    $Paths = @( "", "live/ch01_0", "0/1", "1/main", "0/video1", "1", "1.AMP", "1/h264major", "1/stream1",
         "11", "12", "125", "1080p", "1440p", "480p", "4K", "666", "720p", "AVStream1_1", "CAM_ID.password.mp2",
         "CH001.sdp", "GetData.cgi", "HD", "HighResolutionVideo", "LowResolutionVideo", "MediaInput/h264",
         "MediaInput/mpeg4", "ONVIF/MediaInput", "StdCh1", "Streaming/Channels/1", "Streaming/Unicast/channels/101",
