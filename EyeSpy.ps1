@@ -6,7 +6,6 @@ function EyeSpy {
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [String]$NoAuth,
         [Parameter(Mandatory = $False, ParameterSetName = 'AuthAttack')]
-        #[ValidatePattern('^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}:\b((6553[0-5])|(655[0-2][0-9])|(65[0-4][0-9]{2})|(6[0-4][0-9]{3})|([1-5][0-9]{4})|([0-5]{0,5})|([0-9]{1,4}))\b$', ErrorMessage = "Please ensure you are Entering a valid IP:Port Combination e.g. 10.0.0.1:554")]
         [String]$AuthAttack,
         [Parameter(Mandatory = $False, ParameterSetName = 'AuthAttack')]
         [String]$Path,
@@ -241,12 +240,13 @@ function Get-OpenRTSPPorts {
         if (-not $anyOpenPortsFound) {
             Write-Host -NoNewline -ForegroundColor Red "[-]"
             Write-Host -NoNewline " No Open RTSP Ports detected.`r`n"
+            return
         }
         
         
         Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
         Write-Host " Valid IP's With Open Port's Discovered.`r`n"
-        Write-Host "=========================================================`r`n"
+        Write-Host "========================================================="
     }
 }
 
@@ -286,7 +286,7 @@ function Get-ValidRTSPPaths {
     )
     $authRequiredPaths = @()
     
-    Write-Host "Checking for valid RTSP Paths:`r`n"
+    Write-Host "`r`nChecking for valid RTSP Paths:`r`n"
 
     foreach ($openPort in $OpenPorts) {
         $ip = $openPort.IPAddress
@@ -503,7 +503,7 @@ function Scan {
     $ipRange = Get-IpRange -Target $Targets
     $openPorts = Get-OpenRTSPPorts -IPAddress $ipRange
 
-    Write-Host "Scan completed.`r`n" -ForegroundColor Green
+    Write-Host "`r`nScan completed.`r`n" -ForegroundColor Green
     Write-Host "=========================================================`r`n"
    
 }
@@ -672,11 +672,29 @@ function FullAuto {
 
 if ($Search) {
 
-    Scan -Targets $Search
+    if ($search -match'^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$|^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\b(1[6-9]|2[0-9]|3[0-2])\b$') {
+    
+        Scan -Targets $Search
+
+    } else {
+
+        Write-Host -NoNewline -ForegroundColor Red "[-]"
+        Write-Host " Please ensure you are entering a valid IP(/CIDR) e.g. 10.0.0.1 or 192.168.0.0/24"
+    }
+
 
 } elseif ($NoAuth){
 
-    NoAuthScan -Targets $NoAuth
+    if ($search -match'^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$|^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\b(1[6-9]|2[0-9]|3[0-2])\b$') {
+    
+        NoAuthScan -Targets $NoAuth
+
+    } else {
+
+        Write-Host -NoNewline -ForegroundColor Red "[-]"
+        Write-Host " Please ensure you are entering a valid IP(/CIDR) e.g. 10.0.0.1 or 192.168.0.0/24"
+    }
+ 
 
 } elseif ($AuthAttack){
 
@@ -695,7 +713,16 @@ if ($Search) {
  
 } elseif ($Auto){
 
-    FullAuto -Targets $Auto
+    if ($search -match'^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$|^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\b(1[6-9]|2[0-9]|3[0-2])\b$') {
+    
+        FullAuto -Targets $Auto
+
+    } else {
+
+        Write-Host -NoNewline -ForegroundColor Red "[-]"
+        Write-Host " Please ensure you are entering a valid IP(/CIDR) e.g. 10.0.0.1 or 192.168.0.0/24"
+
+    }
 
 } 
 
