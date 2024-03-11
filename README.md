@@ -22,9 +22,7 @@ EyeSpy is designed to enumerate and gain access to IP Cameras via RTSP. It provi
 
 ## Installation
 
-There is no specific installation required for EyeSpy. Simply download the script from the [GitHub repository](https://github.com/Miiden/EyeSpy) and run it using PowerShell.
-
-
+There is no specific installation required for EyeSpy. Simply download the script from the and run it using PowerShell.
 
 ## Usage
 
