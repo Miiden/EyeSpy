@@ -85,5 +85,12 @@ Eyespy -Help
 ## Contributing
 Contributions to EyeSpy are welcome. Feel free to fork the repository, make improvements, and submit pull requests.
 
+## Disclaimer
+EyeSpy is designed for research, educational, and authorized testing scenarios. The purpose of developing and distributing EyeSpy is to provide professionals and researchers with a tool to understand and identify vulnerabilities and to bolster the security of systems. It is fundamentally imperative that users ensure they have obtained explicit, mutual consent from all involved parties before applying this tool on any system, network, or digital environment.
+
+Engaging in unauthorized activities, including, but not limited to, accessing systems without permission, can lead to severe legal consequences. Users must be fully aware of, and adhere to, all their jurisdictional, local, state, and federal laws and regulations concerning cybersecurity and digital access.
+
+The developers and contributors of EyeSpy expressly disclaim all liabilities and responsibilities for any unauthorized or illicit use of the tool. Additionally, they are not responsible for any consequent damages, losses, or repercussions stemming from the misuse or misapplication of EyeSpy.
+
 ## License
 EyeSpy is licensed under the [MIT](https://github.com/Miiden/EyeSpy/blob/main/LICENSE.md) License.
