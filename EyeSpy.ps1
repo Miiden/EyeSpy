@@ -127,7 +127,7 @@ function Get-IpRange {
                 [int]$SubnetBits = ($subnet -split '\/')[1]
                 if ($SubnetBits -lt 16 -or $SubnetBits -gt 30) {
                     Write-Warning -Message 'Enter a CIDR value between 16 and 30'
-                    return
+                    break 2
                 }
                 $Octets = $IP -split '\.'
                 $IPInBinary = @()
@@ -675,7 +675,7 @@ function FullAuto {
 
 if ($Search) {
 
-    if ($search -match '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$' -or '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\b(1[6-9]|2[0-9]|3[0-2])\b$') {
+    if ($search -match '^\b((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}(\/\b(1[6-9]|2[0-9]|3[0-2])\b)?$') {
     
         Scan -Targets $Search
 
@@ -688,7 +688,7 @@ if ($Search) {
 
 } elseif ($NoAuth){
 
-    if ($NoAuth -match '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$' -or '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\b(1[6-9]|2[0-9]|3[0-2])\b$') {
+    if ($NoAuth -match '^\b((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}(\/\b(1[6-9]|2[0-9]|3[0-2])\b)?$') {
     
         NoAuthScan -Targets $NoAuth
 
@@ -716,7 +716,7 @@ if ($Search) {
  
 } elseif ($Auto){
 
-    if ($Auto -match '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$' -or '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\b(1[6-9]|2[0-9]|3[0-2])\b$') {
+    if ($Auto -match '^\b((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}(\/\b(1[6-9]|2[0-9]|3[0-2])\b)?$') {
     
         FullAuto -Targets $Auto
 
