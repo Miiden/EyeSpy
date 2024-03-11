@@ -54,13 +54,16 @@ Example Usage:
   EyeSpy -NoAuth 192.168.0.123
  
 # Performs a password spraying attack with common credentials on a known open IP:Port
-EyeSpy -AuthAttack 192.168.0.123
+EyeSpy -AuthAttack 192.168.0.13:8554
 
 # Performs a password spraying attack with common credentials on a known open IP:Port/Path
-EyeSpy -AuthAttack 192.168.0.123 -Path 'MyStream'
+EyeSpy -AuthAttack 192.168.0.200:554 -Path 'MyStream'
 
 # Performs all of the above automatically across a single IP or Range
 Eyespy -Auto 192.168.0.1/24
+
+# Shows this help message
+Eyespy -Help
 
 ========================================================================================================
 ")
