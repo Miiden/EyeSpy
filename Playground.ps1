@@ -20,30 +20,50 @@ function EyeSpy {
     if ($Help) {
 
         $HelpOutput = @("
-=========================================================
+========================================================================================================
                 
-=========================================================
-         _______             _______             
-        |    ___.--.--.-----|     __.-----.--.--.
-        |    ___|  |  |  -__|__     |  _  |  |  |
-        |_______|___  |_____|_______|   __|___  |
-                |_____|             |__|  |_____|   
+========================================================================================================
+                                 _______             _______             
+                                |    ___.--.--.-----|     __.-----.--.--.
+                                |    ___|  |  |  -__|__     |  _  |  |  |
+                                |_______|___  |_____|_______|   __|___  |
+                                        |_____|             |__|  |_____|   
                                 
-=========================================================
-                By: Miiden
-=========================================================
+========================================================================================================
+                                By: Miiden
+========================================================================================================
  
- Check GitHub for more detailed descriptions.
+Check GitHub for more detailed descriptions.
 
- Example Usage:
+General Usage Parameters
++---------------------+--------------+-----------------------------------------------------------------+
+| Parameter           |    Value     | Description                                                     |
++---------------------+--------------+-----------------------------------------------------------------+
+| -Search             |  IP(/Range)  | Scans the provided IP/Range for Open RTSP Ports.                |
+| -NoAuth             |  IP(/Range)  | Checks the provided IP/Range if authentication is required.     |
+| -AuthAttack         |   IP:Port    | Performs a Password spray attack on provided targets.           |
+| -Auto               |  IP(/Range)  | All of the above automatically.                                 |
+| -Help               |     N/A      | Shows this Help.                                                |
++---------------------+--------------+-----------------------------------------------------------------+
 
- EyeSpy -Search 192.168.0.1/24
+Example Usage:
 
- EyeSpy -NoAuth 192.168.0.123
+# Search for common open RTSP ports on a single IP or across a range.
+  EyeSpy -Search 192.168.0.1/24
 
- Eyespy -Auto 192.168.0.1/24
+# Searches for common open RTSP ports and checks common paths if authentication is required.
+  EyeSpy -NoAuth 192.168.0.123
+ 
+# Performs a password spraying attack with common credentials on a known open IP:Port
+EyeSpy -AuthAttack 192.168.0.123
 
-=========================================================
+# Performs a password spraying attack with common credentials on a known open IP:Port/Path
+EyeSpy -AuthAttack 192.168.0.123 -Path 'MyStream'
+
+# Performs all of the above automatically across a single IP or Range
+Eyespy -Auto 192.168.0.1/24
+
+========================================================================================================
 ")
 
         $HelpOutput | Write-Output
