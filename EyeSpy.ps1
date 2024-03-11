@@ -196,10 +196,10 @@ function Get-OpenRTSPPorts {
             foreach ($port in $ports) {
                 try {
                     $tcpClient = New-Object System.Net.Sockets.TcpClient
-                    $tcpClient.SendTimeout = 200
-                    $tcpClient.ReceiveTimeout = 200
+                    $tcpClient.SendTimeout = 100
+                    $tcpClient.ReceiveTimeout = 100
                     $awaitResult = $tcpClient.BeginConnect($ip, $port, $null, $null)
-                    $success = $awaitResult.AsyncWaitHandle.WaitOne(250, $false)
+                    $success = $awaitResult.AsyncWaitHandle.WaitOne(100, $false)
 
                     if ($success) {
                         $tcpClient.EndConnect($awaitResult)
@@ -321,7 +321,7 @@ function Get-ValidRTSPPaths {
                     Write-Host -NoNewline " No Auth Required`: "
                     Write-Host -ForegroundColor Green "$ip`:$port/$path"
                     $validPathFound = $true
-
+                    
                 }
                 elseif ($statusLine -match 'RTSP/1.0 401 Unauthorized' -or $statusLine -match 'RTSP/1.0 403 Forbidden') {
                     $authRequiredPaths += [PSCustomObject]@{
