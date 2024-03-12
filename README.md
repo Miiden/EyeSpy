@@ -31,11 +31,7 @@ You may need to be in Bypass mode to run scripts.
 powershell -ep bypass
 ```
 
-### Run EyeSpy in Memory
-```powershell
-IEX(new-object net.webclient).downloadstring('https://raw.githubusercontent.com/Miiden/EyeSpy/main/EyeSpy.ps1')
-```
-### Example
+### EyeSpy OneLiner!
 ```powershell
 IEX(new-object net.webclient).downloadstring('https://raw.githubusercontent.com/Miiden/EyeSpy/main/EyeSpy.ps1');EyeSpy -Auto 10.10.10.0/24
 ```
