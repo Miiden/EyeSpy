@@ -653,17 +653,31 @@ function FullAuto {
                     Credentials = $result.Credential
                 }
 
+                Write-Host -ForegroundColor Green -NoNewline "[+]"
+                Write-Host " Found Credentials: `r`n"
+                
+                Write-Host -NoNewline -ForegroundColor Green  "[+] "
+                $authString = $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
+                Write-Host "Found: $authString"
+                Write-Host -NoNewline -ForegroundColor Green  "[+] "
+                $credsString = "Creds`: " + $result.Credential
+                Write-Host "$credsString`r`n"
+
                 # Remove the current IP:Port combination from the array
                 $authRequiredPaths = $authRequiredPaths | Where-Object { ($_.IPAddress -ne $authPath.IPAddress) -or ($_.Port -ne $authPath.Port) }
+                
+
 
             } else {
                 $index++
             }
         }
-        Write-Host -ForegroundColor Green -NoNewline "[+]"
-        Write-Host " Found Credentials: " 
+ 
+        $fullRTSPString = "rtsp://" + $result.Credential + "@" + $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
+        Write-Host -NoNewline -ForegroundColor Green  "[+] "
+        Write-Host "Full RTSP String: $fullRTSPString"
 
-        return $validCredentials
+        #return $validCredentials
 
     }
     else {
