@@ -505,7 +505,7 @@ function Scan {
         )
 
     $ipRange = Get-IpRange -Target $Targets
-    Get-OpenRTSPPorts -IPAddress $ipRange
+    $antiSpam = Get-OpenRTSPPorts -IPAddress $ipRange
 
     Write-Host "`r`nScan completed.`r`n" -ForegroundColor Green
     Write-Host "=========================================================`r`n"
