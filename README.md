@@ -61,6 +61,7 @@ EyeSpy provides several command-line options to customise its behaviour:
 ```powershell
 EyeSpy -Search 192.168.0.1/24
 ```
+
 ### Searches for common open RTSP ports and checks common paths if authentication is required.
 ```powershell
 EyeSpy -NoAuth 192.168.0.123
