@@ -82,7 +82,7 @@ EyeSpy -AuthAttack 192.168.0.123:554 -Path 'MyStream'
 Eyespy -Auto 192.168.0.1/24
 ```
 <p align="Left">
-<img src="Images/AutoRange.png" width="425" height="560">
+<img src="Images/Auto-Range.png" width="475" height="945">
 </p>
 
 ### Displays the Help
