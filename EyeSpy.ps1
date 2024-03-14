@@ -22,40 +22,40 @@ function EyeSpy {
     if ($Help) {
 
         $HelpOutput = @("
-════════════════════════════════════════════════════════════════════════════════════════════════════════
-                
-════════════════════════════════════════════════════════════════════════════════════════════════════════
+========================================================================================================
+               
+========================================================================================================
                                  _______             _______             
                                 |    ___.--.--.-----|     __.-----.--.--.
                                 |    ___|  |  |  -__|__     |  _  |  |  |
                                 |_______|___  |_____|_______|   __|___  |
                                         |_____|             |__|  |_____|   
                                 
-════════════════════════════════════════════════════════════════════════════════════════════════════════
+========================================================================================================
                                 By: Miiden
-════════════════════════════════════════════════════════════════════════════════════════════════════════
+========================================================================================================
  
 Check GitHub for more detailed descriptions.
 
 General Usage Parameters:
-╔═══════════════════╦════════════╦═════════════════════════════════════════════════════════════════════╗
-║     Parameter     ║   Value    ║                  Description                                        ║
-╠═══════════════════╬════════════╬═════════════════════════════════════════════════════════════════════╣
-║      -Search      ║ IP(/Range) ║ Scans the provided IP/Range for Open RTSP Ports.                    ║
-║      -NoAuth      ║ IP(/Range) ║ Checks the provided IP/Range if authentication is required.         ║
-║       -Auto       ║ IP(/Range) ║ All of the above automatically.                                     ║
-║═══════════════════╬════════════╬═════════════════════════════════════════════════════════════════════╣
-║    -AuthAttack    ║ IP:Port    ║ Performs a Password spray attack on provided targets.               ║
-║       -Path       ║ 'Path'     ║ Requires -AuthAttack, Set a Known Path to Attack                    ║
-╚═══════════════════╩════════════╩═════════════════════════════════════════════════════════════════════╝
++======================================================================================================+
+|     Parameter     |   Value    |                  Description                                        |
++===================+============+=====================================================================+
+|      -Search      | IP(/Range) | Scans the provided IP/Range for Open RTSP Ports.                    |
+|      -NoAuth      | IP(/Range) | Checks the provided IP/Range if authentication is required.         |
+|       -Auto       | IP(/Range) | All of the above automatically.                                     |
++===================+============+=====================================================================+
+|    -AuthAttack    | IP:Port    | Performs a Password spray attack on provided targets.               |
+|       -Path       | 'Path'     | Requires -AuthAttack, Set a Known Path to Attack                    |
++======================================================================================================+
 
 Optional Parameters:
-╔═══════════════════╦════════════╦═════════════════════════════════════════════════════════════════════╗
-║     Parameter     ║   Value    ║                  Description                                        ║
-╠═══════════════════╬════════════╬═════════════════════════════════════════════════════════════════════╣
-║ -Timeout          ║ (10-2000)  ║ (Default: 200) Set Global Receive Timeout Value.                    ║
-║ -Help             ║    N/A     ║ Shows this Help.                                                    ║
-╚═══════════════════╩════════════╩═════════════════════════════════════════════════════════════════════╝
++======================================================================================================+
+|     Parameter     |   Value    |                  Description                                        |
++===================+============+=====================================================================+
+| -Timeout          | (10-2000)  | (Default: 200) Set Global Receive Timeout Value.                    |
+| -Help             |    N/A     | Shows this Help.                                                    |
++======================================================================================================+
 
 Example Usage:
 
@@ -77,7 +77,7 @@ Example Usage:
 # Shows this help message
   Eyespy -Help
 
-════════════════════════════════════════════════════════════════════════════════════════════════════════
+========================================================================================================
 ")
 
         $HelpOutput | Write-Output
@@ -86,18 +86,18 @@ Example Usage:
     }
 
     $Banner = @("
-═════════════════════════════════════════════════════════
+=========================================================
                 
-═════════════════════════════════════════════════════════
+=========================================================
          _______             _______             
         |    ___.--.--.-----|     __.-----.--.--.
         |    ___|  |  |  -__|__     |  _  |  |  |
         |_______|___  |_____|_______|   __|___  |
                 |_____|             |__|  |_____|   
                                 
-═════════════════════════════════════════════════════════
+=========================================================
                 By: Miiden
-═════════════════════════════════════════════════════════
+=========================================================
     ")
 
     if (!$Search -and !$Auto -and !$NoAuth -and !$AuthAttack) {
@@ -120,7 +120,7 @@ Write-Host "Options:`r`n"
 Write-Host -NoNewline -ForegroundColor Yellow "[#]"
 Write-Host -NoNewline " Global Receive Timeout Set To`: "
 Write-Host -ForegroundColor Magenta "$Timeout`r`n"
-Write-Host "═════════════════════════════════════════════════════════`r`n"
+Write-Host "=========================================================`r`n"
 
 function Get-IpRange {
     [CmdletBinding(ConfirmImpact = 'None')]
@@ -310,7 +310,7 @@ function Get-OpenRTSPPorts {
         
         Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
         Write-Host " Valid IPs With Open Ports Discovered.`r`n"
-        Write-Host "═════════════════════════════════════════════════════════"
+        Write-Host "========================================================="
     }
 }
 
@@ -425,7 +425,7 @@ function Get-AuthType {
 
     Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
     Write-Host " Found Required Auth Types`r`n"
-    Write-Host "═════════════════════════════════════════════════════════`r`n"
+    Write-Host "=========================================================`r`n"
 
     return $foundAuth
 }
@@ -527,7 +527,7 @@ function Get-ValidRTSPPaths {
 
     Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
     Write-Host " Potential Paths Found!`r`n"
-    Write-Host "═════════════════════════════════════════════════════════`r`n"
+    Write-Host "=========================================================`r`n"
     return $authRequiredPaths
 }
 
@@ -799,7 +799,7 @@ function Scan {
     $antiSpam = Get-OpenRTSPPorts -IPAddress $ipRange
 
     Write-Host "`r`nScan completed.`r`n" -ForegroundColor Green
-    Write-Host "═════════════════════════════════════════════════════════`r`n"
+    Write-Host "=========================================================`r`n"
    
 }
 
@@ -822,7 +822,7 @@ function NoAuthScan {
     }
     
     Write-Host "`r`nScan completed.`r`n" -ForegroundColor Green
-    Write-Host "═════════════════════════════════════════════════════════`r`n"
+    Write-Host "=========================================================`r`n"
 }
 
 function AuthAttack {
@@ -895,7 +895,7 @@ function AuthAttack {
 
     if ($authRequiredPaths -is [System.Array]) {
         if ($authRequiredPaths.Count -gt 0) {
-            Write-Host "═════════════════════════════════════════════════════════`r`n"
+            Write-Host "=========================================================`r`n"
             Write-Host "Beginning Password Spray:`r`n"
 
             $index = 0
@@ -912,9 +912,9 @@ function AuthAttack {
                         Credentials = $result.Credential
                     }
 
-                    Write-Host -ForegroundColor Yellow -NoNewline "═════"
+                    Write-Host -ForegroundColor Yellow -NoNewline "====="
                     Write-Host -NoNewline " Found Credentials "
-                    Write-Host -ForegroundColor Yellow "═════"
+                    Write-Host -ForegroundColor Yellow "====="
                 
                     Write-Host -NoNewline -ForegroundColor Green  "[+] "
                     $authString = $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
@@ -958,9 +958,9 @@ function AuthAttack {
                 Credentials = $result.Credential
             }
 
-            Write-Host -ForegroundColor Yellow -NoNewline "═════"
+            Write-Host -ForegroundColor Yellow -NoNewline "====="
             Write-Host -NoNewline " Found Credentials "
-            Write-Host -ForegroundColor Yellow "═════"
+            Write-Host -ForegroundColor Yellow "====="
                 
             Write-Host -NoNewline -ForegroundColor Green  "[+] "
             $authString = $authRequiredPaths.IPAddress + ":" + $authRequiredPaths.Port + "/" + $authRequiredPaths.Path
@@ -978,7 +978,7 @@ function AuthAttack {
     }
 
     Write-Host "Scan completed.`r`n" -ForegroundColor Green
-    Write-Host "═════════════════════════════════════════════════════════`r`n"
+    Write-Host "=========================================================`r`n"
 }
 
 function FullAuto {
@@ -1018,9 +1018,9 @@ function FullAuto {
                         Credentials = $result.Credential
                     }
 
-                    Write-Host -ForegroundColor Yellow -NoNewline "═════"
+                    Write-Host -ForegroundColor Yellow -NoNewline "====="
                     Write-Host -NoNewline " Found Credentials "
-                    Write-Host -ForegroundColor Yellow "═════"
+                    Write-Host -ForegroundColor Yellow "====="
                 
                     Write-Host -NoNewline -ForegroundColor Green  "[+] "
                     $authString = $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
@@ -1046,15 +1046,15 @@ function FullAuto {
 
         }
         else {
-            Write-Host "═════════════════════════════════════════════════════════`r`n"
+            Write-Host "=========================================================`r`n"
             Write-Host "No authentication required, see results above.`r`n"
             Write-Host "Scan completed.`r`n" -ForegroundColor Green
-            Write-Host "═════════════════════════════════════════════════════════`r`n"
+            Write-Host "=========================================================`r`n"
         }
 
     }
     Write-Host "`r`nScan completed.`r`n" -ForegroundColor Green
-    Write-Host "═════════════════════════════════════════════════════════`r`n"
+    Write-Host "=========================================================`r`n"
 }
 
 
