@@ -20,7 +20,7 @@ EyeSpy is a tool designed to enumerate and gain access to IP cameras via RTSP. I
 EyeSpy is developed by Miiden and utilises PowerShell to help with penetration tests and research in a Windows environment.
 EyeSpy is designed to enumerate and gain access to IP cameras via RTSP. It provides a flexible and efficient way to scan for open RTSP ports, check if authentication is required, and attempt common credential spraying attacks.
 
-Currently supports Basic and No Authentication, further testing is required for digest authentication, though it seems to work.
+https://github.com/Miiden/EyeSpy/assets/127749134/aae09bc8-4025-42d1-a79d-9090c201a48a
 
 ## Installation
 
@@ -68,7 +68,7 @@ EyeSpy -Search 192.168.0.1/24
 ```powershell
 EyeSpy -NoAuth 192.168.0.123
 ```
- 
+
 ### Performs a password spraying attack with common credentials on a known open IP:Port
 ```powershell
 EyeSpy -AuthAttack 192.168.0.66:8554
@@ -83,9 +83,6 @@ EyeSpy -AuthAttack 192.168.0.123:554 -Path 'MyStream'
 ```powershell
 Eyespy -Auto 192.168.0.1/24
 ```
-<p align="Left">
-<img src="Images/Auto-Range.png" width="475" height="945">
-</p>
 
 ### Displays the Help
 ```powershell
