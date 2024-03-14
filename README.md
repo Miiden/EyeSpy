@@ -49,6 +49,8 @@ EyeSpy provides several command-line options to customise its behaviour:
 - `-AuthAttack <IP:PORT> -Path 'KnownPath'`: Perform a password spray attack on the specified IP:PORT/PATH. Assume the path is correct and does not test for "NoAuth".
    
 - `-Auto <IP/CIDR>`: Perform a fully automatic scan within a specified IP range (CIDR notation). This scan will find open ports and spray each path with combinations of common and default credentials.
+
+- `-Timeout (10-2000)`: (Default: 200) Change the global timeout value for receiving, Increase value for things that might take a while to respond.
   
 - `-Help`: Display the help menu, showing usage instructions and examples.
 
