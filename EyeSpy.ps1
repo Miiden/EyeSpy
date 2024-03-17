@@ -261,7 +261,7 @@ function Get-OpenRTSPPorts {
                     $tcpClient.SendTimeout = 100
                     $tcpClient.ReceiveTimeout = $Timeout
                     $awaitResult = $tcpClient.BeginConnect($ip, $port, $null, $null)
-                    $success = $awaitResult.AsyncWaitHandle.WaitOne(250, $false)
+                    $success = $awaitResult.AsyncWaitHandle.WaitOne(100, $false)
 
                     if ($success) {
                         $tcpClient.EndConnect($awaitResult)
