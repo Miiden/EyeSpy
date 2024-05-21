@@ -234,84 +234,103 @@ function Get-OpenRTSPPorts {
         [string[]]$IPAddress
     )
 
-    begin {
-        Write-Host "Checking for IPs with Open RTSP Ports:`r`n"
-        $activity = "Checking for IPs with Open RTSP Ports"
-        $totalIPAddresses = $IPAddress.Count
-        $currentIPIndex = 0
-        $progressId = Get-Random
-        Write-Progress -Id $progressId -Activity $activity -Status "Starting" -PercentComplete 0
-    }
+    Write-Host "Checking for IPs with Open RTSP Ports:`r`n"
+    $openPorts = [System.Collections.Concurrent.ConcurrentBag[PSCustomObject]]::new()
+    $lock = New-Object System.Object
 
-    process {
-        $openPorts = @()
+    # Create the runspace pool
+    $runspacePool = [runspacefactory]::CreateRunspacePool(1, [System.Environment]::ProcessorCount)
+    $runspacePool.Open()
 
-        foreach ($ip in $IPAddress) {
-            $portsForIP = @()
-            $ports = 554, 8554, 5554
-
-            $currentIPIndex++
-            $percentage = ($currentIPIndex / $totalIPAddresses) * 100
-            $status = "Scanning $ip"
-            Write-Progress -Id $progressId -Activity $activity -Status $status -PercentComplete $percentage
+    $runspaces = foreach ($ip in $IPAddress) {
+        $runspace = [powershell]::Create().AddScript({
+            param ($ip, $ports, $openPorts, $lock)
 
             foreach ($port in $ports) {
                 try {
-                    $tcpClient = New-Object System.Net.Sockets.TcpClient
+                    $tcpClient = [System.Net.Sockets.TcpClient]::new()
                     $tcpClient.SendTimeout = 100
-                    $tcpClient.ReceiveTimeout = $Timeout
+                    $tcpClient.ReceiveTimeout = 100
                     $awaitResult = $tcpClient.BeginConnect($ip, $port, $null, $null)
                     $success = $awaitResult.AsyncWaitHandle.WaitOne(100, $false)
 
                     if ($success) {
                         $tcpClient.EndConnect($awaitResult)
                         if ($tcpClient.Connected) {
-                            Write-Host -NoNewline -ForegroundColor Green "[+]"
-                            Write-Host -NoNewline " Open: "
-                            Write-Host -ForegroundColor Green "$ip`:$port"
-                            $portsForIP += [PSCustomObject]@{
+                            [void]$openPorts.Add([PSCustomObject]@{
                                 IPAddress = $ip
                                 Port      = $port
                                 Status    = "Open"
+                            })
+
+                            lock ($lock) {
+                                # No need for additional logic here
                             }
-                            $tcpClient.Close()
                         }
                     }
-                }
-                catch {
-                    Write-Warning "An error occurred: $_"
-                }
-                finally {
+                } catch {
+                    # Do nothing
+                } finally {
                     if ($tcpClient.Connected) {
+                        $tcpClient.Close()
                         $tcpClient.Dispose()
                     }
                 }
             }
+        }).AddArgument($ip).AddArgument((554, 8554, 5554)).AddArgument($openPorts).AddArgument($lock)
 
-            $openPorts += $portsForIP
-        }
-            return $openPorts
+        $runspace.RunspacePool = $runspacePool
+        [PSCustomObject]@{ Pipe = $runspace; Status = $runspace.BeginInvoke() }
     }
 
-    end {
-        Write-Progress -Id $progressId -Activity $activity -Status "Completed" -PercentComplete 100 -Completed
-        
-        
-        # Check if any open ports were found
-        $anyOpenPortsFound = $openPorts.Count -gt 0
-
-        # Display the message if no open ports were found
-        if (-not $anyOpenPortsFound) {
-            Write-Host -NoNewline -ForegroundColor Red "[-]"
-            Write-Host -NoNewline " No Open RTSP Ports detected.`r`n"
-            return
+    # Ensure all runspaces are properly closed and disposed of
+    try {
+        $runspacesCompleted = $runspaces | ForEach-Object {
+            try {
+                $_.Pipe.EndInvoke($_.Status)
+            } catch {
+                Write-Error "Error ending invoke: $_"
+            } finally {
+                $_.Pipe.Dispose()
+            }
         }
-        
-        
-        Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
-        Write-Host " Valid IPs With Open Ports Discovered.`r`n"
-        Write-Host "========================================================="
+    } finally {
+        try {
+            $runspacePool.Close()
+        } catch {
+            Write-Error "Error closing runspace pool: $_"
+        } finally {
+            $runspacePool.Dispose()
+        }
     }
+
+    $validIPPorts = $openPorts | ForEach-Object {
+        if ($_.Status -eq "Open") {
+            [PSCustomObject]@{
+                IPAddress = $_.IPAddress
+                Port      = $_.Port
+                Status    = "Open"
+            }
+        }
+    }
+
+    if ($validIPPorts.Count -eq 0) {
+        Write-Host -NoNewline -ForegroundColor Red "[-]"
+        Write-Host -NoNewline " No Open RTSP Ports detected.`r`n"
+        return @()
+    }
+
+    Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
+    Write-Host " Valid IPs With Open Ports Discovered.`r`n"
+    Write-Host "========================================================="
+
+    foreach ($result in $validIPPorts) {
+        Write-Host -NoNewline -ForegroundColor Green "[+]"
+        Write-Host -NoNewline " Open: "
+        Write-Host -ForegroundColor Green "$($result.IPAddress):$($result.Port)"
+    }
+
+    return $validIPPorts
 }
 
 function Get-AuthType {
@@ -328,7 +347,7 @@ function Get-AuthType {
 
     Write-Host "`r`nChecking for Auth Types`:`r`n"
 
-    foreach ($openPort in $OpenPorts) {
+    foreach ($openPort in $OpenPorts) {    
         $ip = $openPort.IPAddress
         $port = $openPort.Port
         $authDetected = $false
@@ -995,7 +1014,6 @@ function FullAuto {
     $uniqueIPsWithOpenPorts = $openPorts | Select-Object -ExpandProperty IPAddress -Unique
 
     if ($uniqueIPsWithOpenPorts.Count -gt 0) {
-
         $authTypeResult = Get-AuthType -OpenPorts $openPorts
         $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $authTypeResult
         $validCredentials = @()
