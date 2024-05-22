@@ -89,6 +89,11 @@ Eyespy -Auto 192.168.0.1/24
 Eyespy -Help
 ```
 
+## TODO
+- ~~Async the search function~~
+- Allow for custom username(s) and password(s)
+- Output results to file
+
 ## Contributing
 Contributions to EyeSpy are welcome. Feel free to fork the repository, make improvements, and submit pull requests.
 
