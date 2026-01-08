@@ -1202,7 +1202,7 @@ function Test-DigestRTSPAuth {
                 break  # Empty line means end of headers
             }
             # If we hit another header (not WWW-Authenticate), we might be done with WWW-Authenticate
-            elseif ($response -match "^[A-Za-z-]+:" -and !$response -match "(?i)^WWW-Authenticate:") {
+            elseif (($response -match "^[A-Za-z-]+:") -and ($response -notmatch "(?i)^WWW-Authenticate:")) {
                 if ($inWWWAuthenticate -and $wwwAuthenticateHeader) {
                     $headerComplete = $true
                 }
