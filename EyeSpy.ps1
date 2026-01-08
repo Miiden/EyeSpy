@@ -671,8 +671,9 @@ function GenerateCreds {
         [string]$CustomCreds
     )
     
-    $UserList = @("Admin", "admin", "admin1", "administrator", "Administrator",
-                "aiphone", "root", "Root", "service", "supervisor", "ubnt"
+    $UserList = @("admin", "root", "", "666666","888888", "Admin","admin1", 
+                  "administrator", "Administrator", "aiphone", "Dinion",
+                  "none", "Root", "service", "supervisor", "ubnt"
                 )
 
     $PassList = @("", "0000", "00000", "1111", "111111", "1111111",
