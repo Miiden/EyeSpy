@@ -91,7 +91,7 @@ Eyespy -Help
 
 ## TODO
 - ~~Async the search function~~
-- Allow for custom username(s) and password(s)
+- ~~Allow for custom username(s) and password(s)~~
 - Output results to file
 
 ## Contributing
