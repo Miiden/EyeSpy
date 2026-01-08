@@ -837,7 +837,8 @@ function GenerateCreds {
             $validCount = 0
             foreach ($line in $credLines) {
                 $line = $line.Trim()
-                if ($line -and $line -match '^(.+):(.*)$') {
+                # Split on the first ':' so passwords may contain colons (e.g., admin:pass:word)
+                if ($line -and $line -match '^([^:]+):(.*)$') {
                     $fileUser = $matches[1]
                     $filePass = $matches[2]
                     [void]$authStringList.Add([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$fileUser`:$filePass")))
