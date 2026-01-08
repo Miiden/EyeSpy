@@ -21,7 +21,9 @@ function EyeSpy {
         [Parameter(Mandatory = $False)]
         [String]$Creds,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
-        [Switch]$Help
+        [Switch]$Help,
+        [Parameter(Mandatory = $False)]
+        [Switch]$Common
 
     )
 
@@ -63,6 +65,7 @@ Optional Parameters:
 | -Username         | 'username' | Custom username with default password list.                         |
 | -Password         | 'password' | Custom password with default username list.                         |
 | -Creds            | 'FilePath' | Path to credentials file (username:password per line).              |
+| -Common           |    N/A     | Use common paths only (faster scanning, fewer paths tested).       |
 | -Verbose          |    N/A     | Show detailed RTSP request/response packets for troubleshooting.    |
 | -Help             |    N/A     | Shows this Help.                                                    |
 +======================================================================================================+
@@ -99,6 +102,9 @@ Example Usage:
 # Enable verbose output to see full RTSP packets (for troubleshooting)
   EyeSpy -AuthAttack 192.168.0.100:554 -Username 'admin' -Password 'secret' -Verbose
 
+# Use common paths only for faster scanning (works with -Auto, -AuthAttack, -Search)
+  EyeSpy -Auto 192.168.0.1/24 -Common
+
 # Shows this help message
   Eyespy -Help
 
@@ -110,9 +116,9 @@ Example Usage:
 
     }
 
-    $Banner = @("
+    $Banner = @'
 =========================================================
-                
+               
 =========================================================
          _______             _______             
         |    ___.--.--.-----|     __.-----.--.--.
@@ -123,7 +129,7 @@ Example Usage:
 =========================================================
                 By: Miiden
 =========================================================
-    ")
+'@
 
     if (!$Search -and !$Auto -and !$NoAuth -and !$AuthAttack) {
     
@@ -132,20 +138,85 @@ Example Usage:
         Write-Host "You must Use either -Search, -NoAuth, -AuthAttack or -Auto"
     
         Write-Host "[!] " -ForegroundColor "Red" -NoNewline
-        Write-Host 'Run "EyeSpy -Help" for command line usage'
+        Write-Host "Run 'EyeSpy -Help' for command line usage"
         Write-Host
     
         return
     
     }
 
+    $Banner
+    Write-Host "Options:`r`n"
+    Write-Host -NoNewline -ForegroundColor Yellow "[#]"
+    Write-Host -NoNewline " Global Receive Timeout Set To`: "
+    Write-Host -ForegroundColor Magenta "$Timeout`r`n"
+    Write-Host "=========================================================`r`n"
 
-$Banner
-Write-Host "Options:`r`n"
-Write-Host -NoNewline -ForegroundColor Yellow "[#]"
-Write-Host -NoNewline " Global Receive Timeout Set To`: "
-Write-Host -ForegroundColor Magenta "$Timeout`r`n"
-Write-Host "=========================================================`r`n"
+    if ($Search) {
+
+        if ($search -match '^\b((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}(\/\b(1[6-9]|2[0-9]|3[0-2])\b)?$') {
+        
+            Scan -Targets $Search
+
+        } else {
+
+            Write-Host -NoNewline -ForegroundColor Red "[-]"
+            Write-Host ' Please ensure you are entering a valid IP(/CIDR) e.g. 10.0.0.1 or 192.168.0.0/24'
+        }
+
+
+    } elseif ($NoAuth){
+
+        if ($NoAuth -match '^\b((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}(\/\b(1[6-9]|2[0-9]|3[0-2])\b)?$') {
+        
+            NoAuthScan -Targets $NoAuth
+
+        } else {
+
+            Write-Host -NoNewline -ForegroundColor Red "[-]"
+            Write-Host ' Please ensure you are entering a valid IP(/CIDR) e.g. 10.0.0.1 or 192.168.0.0/24'
+        }
+     
+
+    } elseif ($AuthAttack){
+
+        if ($AuthAttack -match '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}:\b((6553[0-5])|(655[0-2][0-9])|(65[0-4][0-9]{2})|(6[0-4][0-9]{3})|([1-5][0-9]{4})|([0-5]{0,5})|([0-9]{1,4}))\b$') {
+            if ($Path) {
+                Write-Host -NoNewline -ForegroundColor Yellow "[?]"
+                Write-Host " Please note that if no credentials are found the path could be invalid."
+                Write-Host -NoNewline -ForegroundColor Yellow "[?]"
+                Write-Host " Try with -NoAuth or -Auto next.`r`n"
+                
+                AuthAttack -Target $AuthAttack -Path $Path -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds
+
+            } else {
+                Write-Host -NoNewline -ForegroundColor Yellow "[?]"
+                Write-Host " Checking Connection and Paths at Target`r`n"
+
+                $result = AuthAttack -Target $AuthAttack -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds -Common:$Common
+            }
+        
+        } else {
+            Write-Host -NoNewline -ForegroundColor Red "[-]"
+            Write-Host " Please ensure you are entering a valid IP:Port combination e.g. 10.0.0.1:554"
+
+        }  
+     
+    } elseif ($Auto){
+
+        if ($Auto -match '^\b((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}(\/\b(1[6-9]|2[0-9]|3[0-2])\b)?$') {
+        
+            FullAuto -Targets $Auto -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds -Common:$Common
+
+        } else {
+
+            Write-Host -NoNewline -ForegroundColor Red "[-]"
+            Write-Host ' Please ensure you are entering a valid IP(/CIDR) e.g. 10.0.0.1 or 192.168.0.0/24'
+
+        }
+
+    }
+}
 
 function Get-IpRange {
     [CmdletBinding(ConfirmImpact = 'None')]
@@ -304,6 +375,7 @@ function Invoke-RtspRequest {
         $tcpClient.Connect($IP, $Port)
         
         $stream = $tcpClient.GetStream()
+        $stream.ReadTimeout = $ReceiveTimeoutMs  # Set stream timeout as well
         $writer = New-Object System.IO.StreamWriter($stream)
         $writer.Write($request)
         $writer.Flush()
@@ -577,7 +649,9 @@ function Get-ValidRTSPPaths {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
-        [PSCustomObject[]]$OpenPorts
+        [PSCustomObject[]]$OpenPorts,
+        [Parameter(Mandatory = $False)]
+        [Switch]$UseCommonPaths
     )
 
     $Paths = @( "", "0/1", "0/video1", "1", "axis-media/media.amp","cam/realmonitor","Streaming/Channels/101",
@@ -608,53 +682,117 @@ function Get-ValidRTSPPaths {
     "video.pro1", "video.pro2", "video.pro3", "video0", "video0.sdp", "video1", "video1.sdp", "VideoInput/1/h264/1",
     "VideoInput/1/mpeg4/1", "videoinput_1/h264_1/media.stm", "videoMain", "videostream.asf", "vis", "wfov"
     )
-    
+
+    #Common Paths that are often used for authentication, Axis, Hikvision, Dahua, etc. only searches one stream for speed.
+    $CommonPaths = @( "1", "MyStream", "Streaming/Channels/101", "Streaming/Channels/1", "axis-media/media.amp", "rtsp_tunnel", 
+                     "cam/realmonitor?channel=1&subtype=1", "profile1/media.smp", "stream1", "LiveChannel/0/media.smp", 
+                     "ch01/0" ,"media/video1", "0/profile2/media.smp")
+
     $authRequiredPaths = @()
     
-    Write-Host "`r`nChecking for valid RTSP Paths:`r`n"
+    # Select which path list to use based on the switch
+    $pathsToScan = if ($UseCommonPaths) { $CommonPaths } else { $Paths }
+    
+    Write-Host "`r`nChecking for valid RTSP Paths"
+    if ($UseCommonPaths) {
+        Write-Host "Using common paths only (fast mode)`r`n" -ForegroundColor Cyan
+    } else {
+        Write-Host "`r`n"
+    }
+
+    # Check if OpenPorts is empty or null
+    if ($null -eq $OpenPorts -or $OpenPorts.Count -eq 0) {
+        Write-Host "No open ports provided to scan for paths." -ForegroundColor Yellow
+        return $authRequiredPaths
+    }
 
     # Group by IP:Port to handle multiple ports per IP
     $portsByIPPort = $OpenPorts | Group-Object -Property { "$($_.IPAddress):$($_.Port)" }
     
+    $totalPorts = $portsByIPPort.Count
+    
+    if ($totalPorts -eq 0) {
+        Write-Host "No ports to scan." -ForegroundColor Yellow
+        return $authRequiredPaths
+    }
+    
+    $portIndex = 0
+    
     foreach ($portGroup in $portsByIPPort) {
+        $portIndex++
         $openPort = $portGroup.Group[0]  # Get first item (all have same IP:Port)
         $ip = $openPort.IPAddress
         $port = $openPort.Port
         $authType = $openPort.authType
 
-        foreach ($path in $Paths) {
-            # Use the centralized RTSP helper
-            $response = Invoke-RtspRequest -IP $ip -Port $port -Method "DESCRIBE" `
-                -Uri "rtsp://$ip`:$port/$path" -Headers @("CSeq: 1") `
-                -ReceiveTimeoutMs $Timeout
+        Write-Host -NoNewline "Scanning $ip`:$port (Port $portIndex/$totalPorts)... "
+        
+        $pathIndex = 0
+        $totalPaths = $pathsToScan.Count
+        $foundAuthPath = $false
 
-            if ($response.Success) {
-                if ($response.StatusCode -eq 200) {
-                    Write-Host -NoNewline -ForegroundColor Green "[+]"
-                    Write-Host -NoNewline " No Auth Required`: "
-                    Write-Host -ForegroundColor Green "$ip`:$port/$path"
-                    # Continue scanning to find ALL auth-required paths as well
+        foreach ($path in $pathsToScan) {
+            try {
+                $pathIndex++
+                # Show progress every 50 paths to reduce overhead
+                if ($pathIndex % 50 -eq 0 -or $pathIndex -eq $totalPaths) {
+                    Write-Host -NoNewline "`rScanning $ip`:$port (Port $portIndex/$totalPorts) - Path $pathIndex/$totalPaths... "
                 }
-                elseif ($response.StatusCode -eq 401 -or $response.StatusCode -eq 403) {
-                    # Collect ALL auth-required paths (don't stop after first)
-                    $authRequiredPaths += [PSCustomObject]@{
-                        IPAddress = $ip
-                        Port      = $port
-                        Path      = $path
-                        authType  = $authType
+                
+                # Use the centralized RTSP helper
+                $response = Invoke-RtspRequest -IP $ip -Port $port -Method "DESCRIBE" `
+                    -Uri "rtsp://$ip`:$port/$path" -Headers @("CSeq: 1") `
+                    -ReceiveTimeoutMs $Timeout
+
+                if ($response.Success) {
+                    if ($response.StatusCode -eq 200) {
+                        # No auth required - silently continue
+                    }
+                    elseif ($response.StatusCode -eq 401 -or $response.StatusCode -eq 403) {
+                        # Found auth-required path - add it to the list
+                        $authRequiredPaths += [PSCustomObject]@{
+                            IPAddress = $ip
+                            Port      = $port
+                            Path      = $path
+                            authType  = $authType
+                        }
+                        $foundAuthPath = $true
+                        # Continue scanning to find all auth-required paths for this port
+                        # Don't break - we want to test all paths that require auth
                     }
                 }
+                else {
+                    # Silently continue on connection errors
+                }
             }
-            else {
-                # Silently continue on connection errors
-                # Optionally log: Write-Warning "Error testing path $path on $ip`:$port - $($response.Error)"
+            catch [System.OperationCanceledException] {
+                # Ctrl+C pressed during path scanning - move to next port
+                Write-Host "`r`n[!] Path scanning interrupted - moving to next port" -ForegroundColor Yellow
+                break
             }
+            catch {
+                # Other errors - continue to next path
+                continue
+            }
+        }
+        
+        if ($foundAuthPath) {
+            Write-Host "`rScanning $ip`:$port complete - Found auth path                    "
+        } else {
+            Write-Host "`rScanning $ip`:$port complete - No auth path found                    "
         }
     }
 
-    Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
-    Write-Host " Potential Paths Found!`r`n"
-    Write-Host "=========================================================`r`n"
+    if ($authRequiredPaths.Count -gt 0) {
+        Write-Host -NoNewline -ForegroundColor Green "`r`n[+]"
+        Write-Host " Potential Paths Found! ($($authRequiredPaths.Count) path(s))`r`n"
+        Write-Host "=========================================================`r`n"
+    } else {
+        Write-Host -NoNewline -ForegroundColor Yellow "`r`n[!]"
+        Write-Host " No authentication-required paths found.`r`n"
+        Write-Host "=========================================================`r`n"
+    }
+    
     return $authRequiredPaths
 }
 
@@ -792,45 +930,81 @@ function Get-ValidRTSPCredential {
     $totalCredentials = $credentials.Count
 
     foreach ($cred in $credentials) {
-        $credentialStep++
-        $childActivity = "Trying credential $($credentialStep)/$totalCredentials"
-        $childStatus = "Working"
-        $childId = Get-Random
+        try {
+            $credentialStep++
+            $childActivity = "Trying credential $($credentialStep)/$totalCredentials"
+            $childStatus = "Working"
+            $childId = Get-Random
 
-        $parentProgress = [math]::Floor(($credentialStep / $totalCredentials) * 100)
-        Write-Progress -Id $parentId -Activity $parentActivity -Status $parentStatus -PercentComplete $parentProgress -CurrentOperation $childActivity -SecondsRemaining (-1)
+            $parentProgress = [math]::Floor(($credentialStep / $totalCredentials) * 100)
+            Write-Progress -Id $parentId -Activity $parentActivity -Status $parentStatus -PercentComplete $parentProgress -CurrentOperation $childActivity -SecondsRemaining (-1)
 
-        # Decode credential for verbose output
-        $decodedCred = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($cred))
-        Write-Verbose "[$credentialStep/$totalCredentials] Testing: $decodedCred"
+            # Decode credential for verbose output
+            $decodedCred = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($cred))
+            Write-Verbose "[$credentialStep/$totalCredentials] Testing: $decodedCred"
 
-        if ($authType -eq "Digest"){
-            # Use Digest Auth Mode
-            $validCred = Test-DigestRTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
-        } elseif ($authType -eq "Basic") {
-            # Use Basic Auth Mode
-            $validCred = Test-BasicRTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
-        } elseif ($authType -eq "Unknown"){
-            # At the moment, if an Unknown Auth Type is detected in the initial AuthType Checks (hopefully not) It just resorts to checking Basic Auth
-            # Further checks/attacks need to be implimented here.
-            $validCred = Test-BasicRTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
-        }
-
-        if ($validCred) {
-            Write-Progress -Id $parentId -Activity $parentActivity -Status "Success" -PercentComplete 100 -Completed
-            Write-Progress -Id $childId -Activity $childActivity -Status "Success" -PercentComplete 100 -Completed -ParentId $parentId
-            Write-Verbose "========================================================="
-            Write-Verbose "CREDENTIALS FOUND for $IP`:$Port/$Path"
-            Write-Verbose "========================================================="
-
-            return [PSCustomObject]@{
-                Credential = $validCred
-                CredentialFound = $true
+            if ($authType -eq "Digest"){
+                # Use Digest Auth Mode
+                $validCred = Test-DigestRTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
+            } elseif ($authType -eq "Basic") {
+                # Use Basic Auth Mode
+                $validCred = Test-BasicRTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
+            } elseif ($authType -eq "Unknown"){
+                # At the moment, if an Unknown Auth Type is detected in the initial AuthType Checks (hopefully not) It just resorts to checking Basic Auth
+                # Further checks/attacks need to be implimented here.
+                $validCred = Test-BasicRTSPAuth -IP $IP -Port $Port -Path $Path -Credential $cred
             }
-        } else {
-            $childStatus = "Failed"
-            Write-Progress -Id $childId -Activity $childActivity -Status $childStatus -PercentComplete 100 -Completed -ParentId $parentId
-            Write-Verbose "? Credential failed: $decodedCred"
+
+            if ($validCred) {
+                # Clear ALL progress bars completely to ensure output is visible
+                Write-Progress -Id $parentId -Activity $parentActivity -Completed
+                Write-Progress -Id $childId -Activity $childActivity -Completed
+                
+                # Small delay to ensure progress bars are cleared
+                Start-Sleep -Milliseconds 100
+                
+                # Immediate output when credentials are found (flush to console immediately)
+                [Console]::Out.Flush()
+                Write-Host ""
+                Write-Host -ForegroundColor Yellow -NoNewline "====="
+                Write-Host -NoNewline " CREDENTIALS FOUND "
+                Write-Host -ForegroundColor Yellow "====="
+                Write-Host -NoNewline -ForegroundColor Green "[+] "
+                Write-Host "Path: $IP`:$Port/$Path"
+                Write-Host -NoNewline -ForegroundColor Green "[+] "
+                Write-Host "Credentials: $validCred"
+                $fullRTSPString = "rtsp://$validCred@$IP`:$Port/$Path"
+                Write-Host -NoNewline -ForegroundColor Green "[RTSP] "
+                Write-Host "$fullRTSPString"
+                Write-Host ""
+                [Console]::Out.Flush()
+                
+                Write-Verbose "========================================================="
+                Write-Verbose "CREDENTIALS FOUND for $IP`:$Port/$Path"
+                Write-Verbose "========================================================="
+
+                return [PSCustomObject]@{
+                    Credential = $validCred
+                    CredentialFound = $true
+                }
+            } else {
+                $childStatus = "Failed"
+                Write-Progress -Id $childId -Activity $childActivity -Status $childStatus -PercentComplete 100 -Completed -ParentId $parentId
+                Write-Verbose "? Credential failed: $decodedCred"
+            }
+        }
+        catch [System.OperationCanceledException] {
+            # Ctrl+C pressed - stop current credential testing and return null
+            Write-Host "`r`n[!] Password spray interrupted by user - moving to next target" -ForegroundColor Yellow
+            Write-Progress -Id $parentId -Activity $parentActivity -Status "Cancelled" -Completed
+            return [PSCustomObject]@{
+                Credential = $null
+                CredentialFound = $false
+            }
+        }
+        catch {
+            # Other errors - continue to next credential
+            continue
         }
     }
 
@@ -1186,7 +1360,9 @@ function AuthAttack {
         [Parameter(Mandatory = $false)]
         [string]$CustomPassword,
         [Parameter(Mandatory = $false)]
-        [string]$CustomCreds
+        [string]$CustomCreds,
+        [Parameter(Mandatory = $false)]
+        [Switch]$Common
     )
     $ipAndPort = $Target.Split(':')
     $ip = $ipAndPort[0]
@@ -1248,7 +1424,7 @@ function AuthAttack {
             Port      = $port
             AuthType  = $getAuth.authType
         }
-        $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $AuthConstruct
+        $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $AuthConstruct -UseCommonPaths:$Common
     }
 
 
@@ -1277,38 +1453,38 @@ function AuthAttack {
                 foreach ($authPath in $portPaths) {
                     if ($credFoundForPort) { break }  # Stop testing this port if credentials found
 
-                    $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -authType $authPath.authType `
-                        -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds
+                    try {
+                        $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -authType $authPath.authType `
+                            -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds
 
-                    if ($result.CredentialFound) {
-                        $validCredentials += [PSCustomObject]@{
-                            IPAddress   = $authPath.IPAddress
-                            Port        = $authPath.Port
-                            Path        = $authPath.Path
-                            Credentials = $result.Credential
+                        # Check if credentials were found
+                        if ($null -ne $result -and $result.PSObject.Properties['CredentialFound'] -and $result.CredentialFound -eq $true) {
+                            # Credentials already printed immediately in Get-ValidRTSPCredential
+                            # Just store for summary at the end
+                            if ($null -ne $result.PSObject.Properties['Credential'] -and $null -ne $result.Credential -and $result.Credential -ne "") {
+                                $validCredentials += [PSCustomObject]@{
+                                    IPAddress   = $authPath.IPAddress
+                                    Port        = $authPath.Port
+                                    Path        = $authPath.Path
+                                    Credentials = $result.Credential
+                                }
+                                
+                                $portsWithCreds[$portKey] = $true
+                                $credFoundForPort = $true
+                            }
                         }
-
-                        Write-Host -ForegroundColor Yellow -NoNewline "====="
-                        Write-Host -NoNewline " Found Credentials "
-                        Write-Host -ForegroundColor Yellow "====="
-                    
-                        Write-Host -NoNewline -ForegroundColor Green  "[+] "
-                        $authString = $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
-                        Write-Host "Path: $authString"
-                        Write-Host -NoNewline -ForegroundColor Green  "[+] "
-                        $credsString = "Creds`: " + $result.Credential
-                        Write-Host "$credsString `r`n"
-                        $fullRTSPString = "rtsp://" + $result.Credential + "@" + $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
-                        Write-Host -NoNewline -ForegroundColor Green  "[RTSP] "
-                        Write-Host "$fullRTSPString"
-
-                        $portsWithCreds[$portKey] = $true
-                        $credFoundForPort = $true
+                    }
+                    catch [System.OperationCanceledException] {
+                        # Ctrl+C pressed - stop current path and move to next port
+                        Write-Host "`r`n[!] Password spray interrupted - moving to next port" -ForegroundColor Yellow
+                        break
+                    }
+                    catch {
+                        # Other errors - continue to next path
+                        continue
                     }
                 }
             }
-
-            #return $validCredentials
         }
     } elseif ($null -eq $authRequiredPaths) {
 
@@ -1323,30 +1499,40 @@ function AuthAttack {
             -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds
         
 
-        if ($result.CredentialFound) {
-            $validCredentials += [PSCustomObject]@{
-                IPAddress   = $authRequiredPaths.IPAddress
-                Port        = $authRequiredPaths.Port
-                Path        = $authRequiredPaths.Path
-                Credentials = $result.Credential
+        # Check if credentials were found
+        if ($null -ne $result -and $result.PSObject.Properties['CredentialFound'] -and $result.CredentialFound -eq $true) {
+            # Credentials already printed immediately in Get-ValidRTSPCredential
+            # Just store for summary at the end
+            if ($null -ne $result.PSObject.Properties['Credential'] -and $null -ne $result.Credential -and $result.Credential -ne "") {
+                $validCredentials += [PSCustomObject]@{
+                    IPAddress   = $authRequiredPaths.IPAddress
+                    Port        = $authRequiredPaths.Port
+                    Path        = $authRequiredPaths.Path
+                    Credentials = $result.Credential
+                }
             }
-
-            Write-Host -ForegroundColor Yellow -NoNewline "====="
-            Write-Host -NoNewline " Found Credentials "
-            Write-Host -ForegroundColor Yellow "====="
-                
-            Write-Host -NoNewline -ForegroundColor Green  "[+] "
-            $authString = $authRequiredPaths.IPAddress + ":" + $authRequiredPaths.Port + "/" + $authRequiredPaths.Path
-            Write-Host "Path: $authString"
-            Write-Host -NoNewline -ForegroundColor Green  "[+] "
-            $credsString = "Creds`: " + $result.Credential
-            Write-Host "$credsString `r`n"
-            $fullRTSPString = "rtsp://" + $result.Credential + "@" + $authRequiredPaths.IPAddress + ":" + $authRequiredPaths.Port + "/" + $authRequiredPaths.Path
-            Write-Host -NoNewline -ForegroundColor Green  "[RTSP] "
-            Write-Host "$fullRTSPString"
-
-            #return $validCredentials
         }
+    }
+
+    # Print summary of all found credentials at the end (same format as FullAuto)
+    Write-Host ""
+    if ($validCredentials.Count -gt 0) {
+        Write-Host -ForegroundColor Yellow "========================================================="
+        Write-Host -ForegroundColor Yellow "           SUMMARY - ALL FOUND CREDENTIALS"
+        Write-Host -ForegroundColor Yellow "========================================================="
+        Write-Host ""
+        foreach ($cred in $validCredentials) {
+            Write-Host -NoNewline -ForegroundColor Green "[+] "
+            Write-Host "$($cred.IPAddress):$($cred.Port)/$($cred.Path) - $($cred.Credentials)"
+            Write-Host -NoNewline -ForegroundColor Green "[RTSP] "
+            Write-Host "rtsp://$($cred.Credentials)@$($cred.IPAddress):$($cred.Port)/$($cred.Path)"
+            Write-Host ""
+        }
+        Write-Host -ForegroundColor Yellow "========================================================="
+        Write-Host ""
+    } else {
+        Write-Host -ForegroundColor Yellow "No credentials found during password spray."
+        Write-Host ""
     }
 
     Write-Host "Scan completed.`r`n" -ForegroundColor Green
@@ -1363,7 +1549,9 @@ function FullAuto {
         [Parameter(Mandatory = $false)]
         [string]$CustomPassword,
         [Parameter(Mandatory = $false)]
-        [string]$CustomCreds
+        [string]$CustomCreds,
+        [Parameter(Mandatory = $false)]
+        [Switch]$Common
     )
 
     $ipRange = Get-IpRange -Target $Targets
@@ -1374,8 +1562,22 @@ function FullAuto {
 
     if ($uniqueIPsWithOpenPorts.Count -gt 0) {
         $authTypeResult = Get-AuthType -OpenPorts $openPorts
-        $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $authTypeResult
+        
+        if ($null -eq $authTypeResult -or $authTypeResult.Count -eq 0) {
+            Write-Host "No auth types found. Scan completed." -ForegroundColor Yellow
+            return
+        }
+        
+        $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $authTypeResult -UseCommonPaths:$Common
         $validCredentials = @()
+
+        # Ensure authRequiredPaths is always an array (handle single object returns)
+        if ($null -eq $authRequiredPaths) {
+            $authRequiredPaths = @()
+        } else {
+            # Force to array - @() ensures it's always an array even if single object
+            $authRequiredPaths = @($authRequiredPaths)
+        }
 
         if ($authRequiredPaths.Count -gt 0) {
 
@@ -1401,37 +1603,59 @@ function FullAuto {
                 foreach ($authPath in $portPaths) {
                     if ($credFoundForPort) { break }  # Stop testing this port if credentials found
 
-                    $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -authType $authPath.authType `
-                        -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds
+                    try {
+                        $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -authType $authPath.authType `
+                            -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds
 
-                    if ($result.CredentialFound) {
-                        $validCredentials += [PSCustomObject]@{
-                            IPAddress   = $authPath.IPAddress
-                            Port        = $authPath.Port
-                            Path        = $authPath.Path
-                            Credentials = $result.Credential
+                        # Check if credentials were found
+                        if ($null -ne $result -and $result.PSObject.Properties['CredentialFound'] -and $result.CredentialFound -eq $true) {
+                            # Credentials already printed immediately in Get-ValidRTSPCredential
+                            # Just store for summary at the end
+                            if ($null -ne $result.PSObject.Properties['Credential'] -and $null -ne $result.Credential -and $result.Credential -ne "") {
+                                $validCredentials += [PSCustomObject]@{
+                                    IPAddress   = $authPath.IPAddress
+                                    Port        = $authPath.Port
+                                    Path        = $authPath.Path
+                                    Credentials = $result.Credential
+                                }
+                                
+                                $portsWithCreds[$portKey] = $true
+                                $credFoundForPort = $true
+                            }
                         }
-
-                        Write-Host -ForegroundColor Yellow -NoNewline "====="
-                        Write-Host -NoNewline " Found Credentials "
-                        Write-Host -ForegroundColor Yellow "====="
-                    
-                        Write-Host -NoNewline -ForegroundColor Green  "[+] "
-                        $authString = $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
-                        Write-Host "Path: $authString"
-                        Write-Host -NoNewline -ForegroundColor Green  "[+] "
-                        $credsString = "Creds`: " + $result.Credential
-                        Write-Host "$credsString `r`n"
-                        $fullRTSPString = "rtsp://" + $result.Credential + "@" + $authPath.IPAddress + ":" + $authPath.Port + "/" + $authPath.Path
-                        Write-Host -NoNewline -ForegroundColor Green  "[RTSP] "
-                        Write-Host "$fullRTSPString"
-
-                        $portsWithCreds[$portKey] = $true
-                        $credFoundForPort = $true
+                    }
+                    catch [System.OperationCanceledException] {
+                        # Ctrl+C pressed - stop current path and move to next port
+                        Write-Host "`r`n[!] Password spray interrupted - moving to next port" -ForegroundColor Yellow
+                        break
+                    }
+                    catch {
+                        # Other errors - continue to next path
+                        continue
                     }
                 }
             }
 
+            # Print summary of all found credentials at the end (after all port groups are processed)
+            Write-Host ""
+            if ($validCredentials.Count -gt 0) {
+                Write-Host -ForegroundColor Yellow "========================================================="
+                Write-Host -ForegroundColor Yellow "           SUMMARY - ALL FOUND CREDENTIALS"
+                Write-Host -ForegroundColor Yellow "========================================================="
+                Write-Host ""
+                foreach ($cred in $validCredentials) {
+                    Write-Host -NoNewline -ForegroundColor Green "[+] "
+                    Write-Host "$($cred.IPAddress):$($cred.Port)/$($cred.Path) - $($cred.Credentials)"
+                    Write-Host -NoNewline -ForegroundColor Green "[RTSP] "
+                    Write-Host "rtsp://$($cred.Credentials)@$($cred.IPAddress):$($cred.Port)/$($cred.Path)"
+                    Write-Host ""
+                }
+                Write-Host -ForegroundColor Yellow "========================================================="
+                Write-Host ""
+            } else {
+                Write-Host -ForegroundColor Yellow "No credentials found during password spray."
+                Write-Host ""
+            }
 
         }
         else {
@@ -1440,77 +1664,7 @@ function FullAuto {
             Write-Host "Scan completed.`r`n" -ForegroundColor Green
             Write-Host "=========================================================`r`n"
         }
-
     }
     Write-Host "`r`nScan completed.`r`n" -ForegroundColor Green
     Write-Host "=========================================================`r`n"
-}
-
-
-
-if ($Search) {
-
-    if ($search -match '^\b((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}(\/\b(1[6-9]|2[0-9]|3[0-2])\b)?$') {
-    
-        Scan -Targets $Search
-
-    } else {
-
-        Write-Host -NoNewline -ForegroundColor Red "[-]"
-        Write-Host ' Please ensure you are entering a valid IP(/CIDR) e.g. 10.0.0.1 or 192.168.0.0/24'
-    }
-
-
-} elseif ($NoAuth){
-
-    if ($NoAuth -match '^\b((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}(\/\b(1[6-9]|2[0-9]|3[0-2])\b)?$') {
-    
-        NoAuthScan -Targets $NoAuth
-
-    } else {
-
-        Write-Host -NoNewline -ForegroundColor Red "[-]"
-        Write-Host ' Please ensure you are entering a valid IP(/CIDR) e.g. 10.0.0.1 or 192.168.0.0/24'
-    }
- 
-
-} elseif ($AuthAttack){
-
-    if ($AuthAttack -match '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}:\b((6553[0-5])|(655[0-2][0-9])|(65[0-4][0-9]{2})|(6[0-4][0-9]{3})|([1-5][0-9]{4})|([0-5]{0,5})|([0-9]{1,4}))\b$') {
-        if ($Path) {
-            Write-Host -NoNewline -ForegroundColor Yellow "[?]"
-			Write-Host " Please note that if no credentials are found the path could be invalid."
-			Write-Host -NoNewline -ForegroundColor Yellow "[?]"
-			Write-Host " Try with -NoAuth or -Auto next.`r`n"
-			
-			AuthAttack -Target $AuthAttack -Path $Path -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds
-
-        } else {
-            Write-Host -NoNewline -ForegroundColor Yellow "[?]"
-			Write-Host " Checking Connection and Paths at Target`r`n"
-
-            $result = AuthAttack -Target $AuthAttack -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds
-    }
-    
-    } else {
-     Write-Host -NoNewline -ForegroundColor Red "[-]"
-     Write-Host " Please ensure you are entering a valid IP:Port combination e.g. 10.0.0.1:554"
-
-    }  
- 
-} elseif ($Auto){
-
-    if ($Auto -match '^\b((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}(\/\b(1[6-9]|2[0-9]|3[0-2])\b)?$') {
-    
-        FullAuto -Targets $Auto -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds
-
-    } else {
-
-        Write-Host -NoNewline -ForegroundColor Red "[-]"
-        Write-Host ' Please ensure you are entering a valid IP(/CIDR) e.g. 10.0.0.1 or 192.168.0.0/24'
-
-    }
-
-} 
-
 }
