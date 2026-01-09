@@ -16,7 +16,7 @@ Clone and set up IPCameraEmulatorstd.exe https://github.com/inspiredtechnologies
 
 Install and set up MediaMTX https://github.com/bluenviron/mediamtx
 - Yaml File
-- - 189: rtspAuthMethods: [digest]
+  - 189: rtspAuthMethods: [digest]
   - 64: user: service
   - 66: pass: service
   - 167: rtspAddress: :8554
