@@ -22,7 +22,9 @@ EyeSpy is designed to enumerate and gain access to IP cameras via RTSP. It provi
 
 https://github.com/Miiden/EyeSpy/assets/127749134/aae09bc8-4025-42d1-a79d-9090c201a48a
 
-## Installation
+## Configuration
+
+➡️ Visit the Wiki for complete documentation.
 
 There is no specific installation required for EyeSpy. Simply download the script and run it using PowerShell.
 You may need to be in Bypass mode to run scripts.
@@ -50,11 +52,9 @@ EyeSpy provides several command-line options to customise its behaviour:
    
 - `-Auto <IP/CIDR>`: Perform a fully automatic scan within a specified IP range (CIDR notation). This scan will find open ports and spray each path with combinations of common and default credentials.
 
-- `-Timeout (10-2000)`: (Default: 200) Change the global timeout value for receiving, Increase value for things that might take a while to respond.
+- `-Timeout (10-3000)`: (Default: 200) Change the global timeout value for receiving, Increase value for things that might take a while to respond.
   
 - `-Help`: Display the help menu, showing usage instructions and examples.
-
-
 
 
 ## Examples
