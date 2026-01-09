@@ -12,7 +12,7 @@ function EyeSpy {
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [String]$Auto,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
-        [ValidateRange(10, 2000)]
+        [ValidateRange(10, 3000)]
         [int]$Timeout = 200,
         [Parameter(Mandatory = $False)]
         [String]$Username,
