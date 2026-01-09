@@ -1,28 +1,24 @@
-Creating README for setting up a lab for testing EyeSpy
+# EyeSpy Lab Setup
 
+This repository includes a **lab environment configuration** for testing EyeSpy with simulated RTSP streams.
 
-PreReqs
+🧪 This setup uses tools like `ffmpeg`, `IPCameraEmulatorSTD.exe`, and `MediaMTX` to create a set of RTSP cameras — both unauthenticated and authenticated — for experimentation and validation.
 
-Windows 10/11 Eval Virtual Machine
-I used VirtualBox so i could use Linked Bases and have 2 machines with alternating setups
-Baisc Auth and Digest Auth - 4 Cameras.
+## Quick Summary
 
+In this lab you will configure:
 
-Install ffmpeg https://www.ffmpeg.org/download.html
+- A **no-authentication RTSP stream** (default port 554)
+- A **digest authentication RTSP stream**
+- Optional additional streams for basic authentication
+- Tools for inspecting and interacting with the streams
 
-Clone and set up IPCameraEmulatorstd.exe https://github.com/inspiredtechnologies/IP-Camera-Emulator-Standard
-- MP4 for streaming
+This environment is ideal for **learning, development, and controlled testing** of EyeSpy.
 
+## Full Setup Instructions
 
-Install and set up MediaMTX https://github.com/bluenviron/mediamtx
-- Yaml File
-  - 189: rtspAuthMethods: [digest]
-  - 64: user: service
-  - 66: pass: service
-  - 167: rtspAddress: :8554
-  - 189: rtspAuthMethods: [digest]
-- MP4 for streaming
-- PS1 script for easy running
+The full step-by-step lab setup, including prerequisites, software installation, stream configuration, and troubleshooting, is documented in the **EyeSpy Wiki**:
 
-Install Wireshark for Packet analysis
+➡️ **https://github.com/Miiden/EyeSpy/wiki/Lab-Setup**
 
+Please visit the wiki for detailed instructions and environment guidance.
