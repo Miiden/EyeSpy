@@ -833,6 +833,30 @@ $script:EyeSpy_PassListCache = @{}
 $script:EyeSpy_CredsCache = @{}
 $script:EyeSpy_StatusMessageCache = @{}
 
+# Cleanup function to clear caches
+function Clear-EyeSpyCache {
+    $script:EyeSpy_UserListCache.Clear()
+    $script:EyeSpy_PassListCache.Clear()
+    $script:EyeSpy_CredsCache.Clear()
+    $script:EyeSpy_StatusMessageCache.Clear()
+}
+
+# Register cleanup on script exit (including Ctrl+C termination)
+# This ensures cache is cleared when PowerShell exits for any reason
+$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
+    Clear-EyeSpyCache
+}
+
+# Global trap to catch Ctrl+C (OperationCanceledException) and clear cache
+# This catches cancellation at the script level and ensures cache is cleared
+# The exception will still propagate to existing catch blocks for proper handling
+trap [System.OperationCanceledException] {
+    Write-Host "`r`n[!] Operation cancelled - clearing cache..." -ForegroundColor Yellow
+    Clear-EyeSpyCache
+    # Re-throw to allow existing catch blocks to handle the exception normally
+    throw
+}
+
 function GenerateCreds {
     [CmdletBinding()]
     param (
@@ -1707,6 +1731,9 @@ function AuthAttack {
 
     Write-Host "Scan completed.`r`n" -ForegroundColor Green
     Write-Host "=========================================================`r`n"
+    
+    # Clear caches after summary so they reset for subsequent runs
+    Clear-EyeSpyCache
 }
 
 function FullAuto {
@@ -1943,4 +1970,7 @@ function FullAuto {
     
     Write-Host "Scan completed.`r`n" -ForegroundColor Green
     Write-Host "=========================================================`r`n"
+    
+    # Clear caches after summary so they reset for subsequent runs
+    Clear-EyeSpyCache
 }
